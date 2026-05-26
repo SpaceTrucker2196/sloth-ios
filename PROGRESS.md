@@ -44,11 +44,85 @@ the commit hashes.
 
 ## In progress
 
-*(nothing yet — repo is at pre-M1)*
+*(nothing — M1 just landed; pick M2 next)*
 
 ---
 
 ## Recently landed
+
+### 2026-05-26 — M1: Connection plumbing
+**Commits**: *(see git log; this paragraph lands with that commit)*
+**Touched**:
+- `Sources/SlothCore/SlothRecord.swift` — Codable sum type for the
+  seven sloth JSONL `type` values (`dns`, `tls`, `quic`, `http`,
+  `ntp`, `icmp`, `alert`) plus a forward-compat `unknown(type:, ts:)`
+  case. Per-type sub-structs decode only the fields sloth-ios needs
+  today; unknown keys are ignored.
+- `Sources/SlothCore/LineReader.swift` — actor-isolated newline
+  framer that buffers across chunk boundaries, trims CRLF
+  defensively, and exposes a `lines(from:)` adapter that wraps a
+  byte-chunk `AsyncThrowingStream` as a line `AsyncThrowingStream`.
+- `Sources/SlothCore/ConnectionProfile.swift` — value type with
+  `tcp:HOST:PORT` parsing (incl. `[v6]:PORT`), URI round-trip, and
+  `UserDefaults` save/load. Only persistence in the app per MISSION
+  §2(5).
+- `Sources/SlothCore/SlothClient.swift` — `SlothTransport` protocol
+  seam (so tests inject a deterministic in-memory transport),
+  `NetworkTransport` default backed by `NWConnection`, and a
+  `SlothClient` that wires bytes → frame → JSON decode →
+  `SlothRecord` stream. Garbled lines are skipped, not fatal.
+- `Tests/SlothCoreTests/{LineReaderTests,SlothRecordTests,SlothClientTests,ConnectionProfileTests}.swift`
+  — 29 new hermetic tests covering chunk-split framing, every record
+  type round-trip, the forward-compat envelope, profile parsing/
+  persistence, and a full transport-fed pipe.
+- `App/DebugLogController.swift` — `@Observable` view-local
+  controller (per-CLAUDE.md "`@StateObject` for view-local only";
+  using the iOS-17 `@Observable` + `@State` equivalent). Owns the
+  records ring (500-line cap), connection state, and the active
+  Task. Pre-M2 stand-in for `SlothStore`.
+- `App/ContentView.swift` — connection-bar (status pill, URI field,
+  Connect button) + scrolling log list. View body well under 60
+  lines; children extracted (`ConnectionBar`, `StatusPill`,
+  `DebugLogList`, `LogRow`). Reconnects on `scenePhase == .active`,
+  cancels on `.background`.
+- `project.yml` — excluded `App/Tests/**` from the `SlothIOS` target
+  (it was getting compiled into the app), and gave `SlothIOSTests`
+  its own auto-generated Info.plist + bundle id so the unit-test
+  bundle code-signs cleanly.
+- `Makefile` — `iPhone 15` was the hardcoded destination, but only
+  iPhone 17-class simulators are installed on this Mac; bumped to
+  `iPhone 17 Pro`.
+
+**Verification**:
+- `swift test` — 33/33 green (4 pre-existing AlertSeverity + 29 new).
+- `xcodebuild ... build` — clean, zero warnings.
+- `xcodebuild ... test` — `SlothIOSAppTests` smoke passes on
+  `iPhone 17 Pro` simulator.
+- Manual: installed and launched the app on the iOS-17 simulator;
+  cold-start UI renders correctly (status pill `idle`, URI field
+  pre-populated with default, empty-state placeholder). End-to-end
+  wire validation against a real sloth instance is up to the
+  operator — `cfprefsd` caches `UserDefaults` aggressively, so
+  injecting a profile from outside the running sim isn't a clean
+  smoke path.
+
+**Why**: M1 is the wire-proof milestone. Before any UI design work,
+we needed end-to-end evidence that bytes off the sloth `--data-socket`
+parse into typed records. The transport seam matters as much as the
+codec — every milestone past M1 substitutes a fixture transport in
+its tests, so this layout is load-bearing.
+
+**Follow-ups**:
+- M2 is unblocked: replace the in-process `DebugLogController` ring
+  with `SlothStore` (per-type rings + `AlertHotIndex`).
+- The per-record field set in `SlothRecord` is a best-effort
+  interpretation of the sloth schema page; if sloth's writer uses
+  different JSON keys than guessed (e.g. `qname` vs `name`), update
+  the `CodingKeys` mapping. Decoding ignores unknown keys, so older
+  agents pulling future sloth fields stays safe.
+- Wire-level e2e in the iOS simulator should be folded into a
+  `xcodebuild test` UI test once M2 lands a stable on-screen
+  surface to assert against.
 
 ### 2026-05-26 — Initial repo scaffolding
 **Commits**: *(initial commit)*

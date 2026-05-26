@@ -6,7 +6,7 @@ XCODEBUILD := xcodebuild
 
 PROJECT  := SlothIOS.xcodeproj
 SCHEME   := SlothIOS
-DEST     := platform=iOS Simulator,name=iPhone 15
+DEST     := platform=iOS Simulator,name=iPhone 17 Pro
 
 .PHONY: all generate build test test-core test-app clean
 

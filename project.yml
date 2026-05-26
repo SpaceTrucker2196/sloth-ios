@@ -31,7 +31,9 @@ targets:
     type: application
     platform: iOS
     sources:
-      - App
+      - path: App
+        excludes:
+          - "Tests/**"
     info:
       path: App/Info.plist
       properties:
@@ -61,6 +63,10 @@ targets:
     platform: iOS
     sources:
       - App/Tests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.river.sloth.ios.tests
     dependencies:
       - target: SlothIOS
       - package: SlothCore

@@ -44,11 +44,88 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M1 just landed; pick M2 next)*
+*(nothing — M2 just landed; pick M3 (AlertsView) or M5 (DNS/TLS/HTTP logs) next)*
 
 ---
 
 ## Recently landed
+
+### 2026-05-26 — M2: SlothStore (state surface)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/RingSizes.swift` — public `RingSizes` value type
+  with per-record-type caps (dns 1024, tls 1024, quic 512, http 1024,
+  ntp 128, icmp 256, alerts 128). Defaults are best-effort against
+  sloth's `MAX_*_LOG`; the actual sloth caps should be cross-checked
+  and the defaults updated if they drift.
+- `Sources/SlothCore/AlertHotIndex.swift` — `@MainActor` IP → severity
+  cross-panel index with promotion-only semantics within the TTL
+  window (default 300 s). Higher-severity alerts promote; same-sev
+  refreshes the TTL; lower-sev within the window is dropped; once
+  expired, the entry reverts to whatever the next alert says. Handles
+  `[v6]:port`, `ip:port`, bare IP, bare v6 in `bareIP(_:)` so callers
+  can lookup with whatever representation the source view has.
+- `Sources/SlothCore/SlothStore.swift` — `@MainActor @Observable`
+  single source of truth. Per-type rings, alert dedup by
+  `key ?? title` (mirrors sloth's TUI: one row per alert key with
+  a hit count, not one row per occurrence), alerts sorted
+  newest-first by `lastSeen`, an `unknownCount` for forward-compat,
+  `connectionState`, `recordsReceived`, `lastError`. `ingest(_:)`
+  for single records; `ingest(stream:)` drives the lifecycle off
+  a `SlothClient.records(for:)` stream. `reset()` wipes everything
+  (including the hot index) on profile switch.
+- `App/SlothIOSApp.swift` — owns `@State private var store = SlothStore()`
+  and injects via `.environment(store)`. Every view now uses
+  `@Environment(SlothStore.self)` per CLAUDE.md (no `@StateObject`
+  for cross-view state).
+- `App/ConnectionCoordinator.swift` — `@Observable` view-local
+  coordinator that holds the editable URI buffer and owns the
+  client task; connection state lives on the store now. Replaces
+  the M1 `DebugLogController`.
+- `App/ContentView.swift` — rewired against the store. `ConnectionBar`
+  reads `store.connectionState` + `store.recordsReceived` + the
+  coordinator's URI binding.
+- `App/Views/DebugLogView.swift` — merged log view (every ring +
+  alerts, sorted by ts desc) that bridges M2 → M3+. Will be replaced
+  by `AlertsView` (M3), per-category log views (M5), etc. Bold
+  weight on WARN+CRIT severity rows already wired through here so
+  the per-view spec from M3 can lift the same conventions.
+- `Tests/SlothCoreTests/AlertHotIndexTests.swift` — 13 tests:
+  `bareIP` normalisation across v4/v6/bracketed/portless, promotion-
+  only across all severity transitions, TTL refresh on same-sev,
+  expiry, post-expiry re-write, ignore on missing `match_ip`.
+  Includes a deterministic `TestClock` so TTL tests are hermetic.
+- `Tests/SlothCoreTests/SlothStoreTests.swift` — 12 tests covering
+  per-type ring routing + caps, alert dedup-by-key (with title
+  fallback), newest-first sort by `lastSeen`, alert-cap eviction,
+  alert-hot wiring on alert ingest, `reset()` semantics, and the
+  `ingest(stream:)` lifecycle (state transitions on success +
+  error propagation through `lastError`).
+
+**Verification**:
+- `swift test` — 62/62 green (4 pre-existing + 29 from M1 + 25 from M2).
+- `xcodebuild build`/`test` on `iPhone 17 Pro` simulator: clean,
+  zero warnings, `SlothIOSAppTests` smoke passes.
+- Manual: installed + launched on the iOS-17 simulator; cold-start
+  UI renders identically to M1 (status pill, URI field, empty-state).
+  Internally everything now flows Client → Store → SwiftUI views.
+
+**Why**: M1 proved the wire works. M2 puts a typed state surface
+between the wire and the UI so every future view can subscribe
+without per-view plumbing. The promotion-only `AlertHotIndex` is
+the load-bearing piece for M3's three-tier palette: every other
+view that renders an IP looks it up via the index and inherits the
+hot severity hue from whichever alert promoted it.
+
+**Follow-ups**:
+- Ring caps should be cross-checked against sloth's `app.h` (or
+  wherever the canonical `MAX_*_LOG` constants live). Drift is not
+  a correctness break (rings just hold ±N records vs. the TUI) but
+  matching the TUI exactly is the point.
+- M3 (`AlertsView`) and M5 (DNS/TLS/HTTP log views) are now both
+  unblocked. Pick either; they share no surface.
+- The `DebugLogView` is intentional scaffolding; delete it as
+  per-category views replace each of its ring sources.
 
 ### 2026-05-26 — M1: Connection plumbing
 **Commits**: *(see git log; this paragraph lands with that commit)*

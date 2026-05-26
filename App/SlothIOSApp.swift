@@ -1,15 +1,19 @@
-// SlothIOSApp — @main entry. Owns the SlothStore environment object
-// (added in M2). For now this is a bare scaffold so the app target
-// compiles and runs to the placeholder ContentView.
+// SlothIOSApp — @main entry. Owns the shared `SlothStore` and
+// injects it into the SwiftUI environment so every view can observe
+// records via `@Environment(SlothStore.self)` per CLAUDE.md.
 
 import SwiftUI
 import SlothCore
 
 @main
 struct SlothIOSApp: App {
+
+    @State private var store = SlothStore()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(store)
         }
     }
 }

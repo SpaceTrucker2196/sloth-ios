@@ -28,18 +28,21 @@ public actor LineReader {
     public func pending() -> Data { buffer }
 
     private func drain() -> [Data] {
+        // Scan the whole buffer once, then trim the consumed prefix
+        // once at the end. A naïve rebuild-per-line is O(n²) on chunks
+        // that contain many lines — sloth bursts can easily put
+        // hundreds of records in a single 64 KiB receive.
         var out: [Data] = []
-        while let nl = buffer.firstIndex(of: 0x0a) {
-            let raw = buffer[buffer.startIndex..<nl]
-            let line: Data
-            if raw.last == 0x0d {
-                line = Data(raw.dropLast())
-            } else {
-                line = Data(raw)
-            }
+        var cursor = buffer.startIndex
+        while cursor < buffer.endIndex,
+              let nl = buffer[cursor...].firstIndex(of: 0x0a) {
+            let raw = buffer[cursor..<nl]
+            let line = raw.last == 0x0d ? Data(raw.dropLast()) : Data(raw)
             out.append(line)
-            let next = buffer.index(after: nl)
-            buffer = Data(buffer[next..<buffer.endIndex])
+            cursor = buffer.index(after: nl)
+        }
+        if cursor > buffer.startIndex {
+            buffer = Data(buffer[cursor..<buffer.endIndex])
         }
         return out
     }

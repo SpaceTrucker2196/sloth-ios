@@ -53,11 +53,17 @@ public enum SlothRecord: Sendable, Equatable {
     }
 }
 
-extension SlothRecord: Decodable {
-    private enum DiscriminatorKey: String, CodingKey { case type }
+extension SlothRecord {
+    /// Two-field envelope shared by the decode discriminator path and
+    /// the `.unknown` re-encode path. Both need `type`; `.unknown`
+    /// re-encode also needs `ts` so round-tripping a future record
+    /// preserves its timestamp.
+    fileprivate enum EnvelopeKey: String, CodingKey { case type, ts }
+}
 
+extension SlothRecord: Decodable {
     public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: DiscriminatorKey.self)
+        let c = try decoder.container(keyedBy: EnvelopeKey.self)
         let tag = try c.decode(String.self, forKey: .type)
         switch tag {
         case "dns":   self = .dns  (try DNSEntry  (from: decoder))
@@ -68,12 +74,10 @@ extension SlothRecord: Decodable {
         case "icmp":  self = .icmp (try ICMPEntry (from: decoder))
         case "alert": self = .alert(try AlertEntry(from: decoder))
         default:
-            let stub = try Envelope(from: decoder)
-            self = .unknown(type: tag, ts: stub.ts)
+            let ts = try c.decode(Int.self, forKey: .ts)
+            self = .unknown(type: tag, ts: ts)
         }
     }
-
-    private struct Envelope: Decodable { let ts: Int }
 }
 
 extension SlothRecord: Encodable {
@@ -87,9 +91,9 @@ extension SlothRecord: Encodable {
         case .icmp (let e): try e.encode(to: encoder)
         case .alert(let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
-            var c = encoder.container(keyedBy: DiscriminatorKey.self)
+            var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
-            try c.encode(ts, forKey: DiscriminatorKey(stringValue: "ts")!)
+            try c.encode(ts, forKey: .ts)
         }
     }
 }

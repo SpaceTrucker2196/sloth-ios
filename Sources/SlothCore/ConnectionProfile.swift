@@ -25,7 +25,7 @@ public struct ConnectionProfile: Sendable, Codable, Equatable, Hashable {
     /// Parses `tcp:HOST:PORT` or `tcp:[v6]:PORT`. Returns nil on
     /// malformed input — callers surface a form-validation error.
     public init?(uri: String) {
-        let trimmed = uri.trimmingCharacters(in: .whitespaces)
+        let trimmed = uri.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let schemeEnd = trimmed.firstIndex(of: ":"),
               trimmed[trimmed.startIndex..<schemeEnd] == "tcp"
         else { return nil }

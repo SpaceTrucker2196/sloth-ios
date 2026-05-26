@@ -6,7 +6,10 @@
 // in-memory seam without touching `Network.framework`.
 //
 // Per docs/wiki/jsonl-protocol.md:
-//   * A garbled JSON line is logged + skipped, not fatal.
+//   * A garbled JSON line is dropped, not fatal — sloth's writer
+//     never emits invalid JSON, so a bad line is wire corruption and
+//     losing one record is preferable to tearing down the stream.
+//     M8 wires an OSLog surface; until then the drop is silent.
 //   * `connect()` failures and mid-stream disconnects surface as the
 //     stream finishing with an error; the caller retries (M8 will
 //     wrap this in a backoff `Reconnector`).

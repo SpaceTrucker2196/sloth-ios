@@ -39,6 +39,14 @@ final class ConnectionProfileTests: XCTestCase {
         XCTAssertNil(ConnectionProfile(uri: "tcp::1234"))
     }
 
+    func testTrimsTrailingNewlinesAndWhitespace() {
+        // Pasted URIs commonly carry a trailing newline; the parser
+        // shouldn't reject those.
+        let p = ConnectionProfile(uri: "  tcp:host.tailnet:7777\n")
+        XCTAssertEqual(p?.host, "host.tailnet")
+        XCTAssertEqual(p?.port, 7777)
+    }
+
     func testUriRoundTrip() {
         let p4 = ConnectionProfile(host: "1.2.3.4", port: 7777)
         XCTAssertEqual(p4.uri, "tcp:1.2.3.4:7777")

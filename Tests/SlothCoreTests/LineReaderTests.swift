@@ -50,6 +50,24 @@ final class LineReaderTests: XCTestCase {
         XCTAssertEqual(String(data: lines[2], encoding: .utf8), "x")
     }
 
+    func testManyLinesInOneChunk() async {
+        // Stress the single-chunk path that the rewritten drain()
+        // optimises: building one mega-chunk with many lines should
+        // return every line and reduce the buffer to empty.
+        let count = 5_000
+        var blob = Data()
+        for i in 0..<count {
+            blob.append(Data("line-\(i)\n".utf8))
+        }
+        let reader = LineReader()
+        let lines = await reader.append(blob)
+        XCTAssertEqual(lines.count, count)
+        XCTAssertEqual(String(data: lines.first!, encoding: .utf8), "line-0")
+        XCTAssertEqual(String(data: lines.last!,  encoding: .utf8), "line-\(count - 1)")
+        let pending = await reader.pending()
+        XCTAssertTrue(pending.isEmpty)
+    }
+
     func testStreamAdapterYieldsLines() async throws {
         let bytes = AsyncThrowingStream<Data, any Error> { continuation in
             continuation.yield(Data("hello\nwor".utf8))

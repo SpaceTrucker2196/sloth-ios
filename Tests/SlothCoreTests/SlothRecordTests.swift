@@ -124,6 +124,22 @@ final class SlothRecordTests: XCTestCase {
         }
     }
 
+    func testRoundTripUnknownPreservesTypeAndTs() throws {
+        // The `.unknown` case has bespoke encode logic separate from
+        // the per-record sub-structs. Cover it explicitly so a
+        // regression in that path can't slip through (the original
+        // implementation force-unwrapped an absent CodingKey here).
+        let original: SlothRecord = .unknown(type: "future_kind", ts: 1716700005)
+        let data = try JSONEncoder().encode(original)
+        let back = try JSONDecoder().decode(SlothRecord.self, from: data)
+        XCTAssertEqual(back, original)
+
+        // Verify the wire shape, not just round-trip equality.
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["type"] as? String, "future_kind")
+        XCTAssertEqual(json["ts"]   as? Int,    1716700005)
+    }
+
     // MARK: - Helpers
 
     private func decode(_ json: String) throws -> SlothRecord {

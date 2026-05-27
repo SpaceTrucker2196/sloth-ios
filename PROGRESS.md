@@ -44,11 +44,90 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M7 just landed; M6 is blocked on sloth-side connection records, M8 is unblocked next)*
+*(nothing — M8 just landed; M6 (Connections) remains blocked on a sloth-side JSONL record. v1.0 line is feature-complete pending M6)*
 
 ---
 
 ## Recently landed
+
+### 2026-05-27 — M8: Polish, profiles, reconnect
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/ProfileStore.swift` — `@MainActor @Observable`
+  list of `NamedProfile`s (`UUID + label + ConnectionProfile`)
+  with an `activeID`. Persisted to `UserDefaults` under a single
+  JSON-encoded key (per MISSION §2(5), the only thing this app
+  ever writes to disk). First-load upgrades the M1 single-profile
+  key so operators who came up from M1 don't lose their entry.
+- `Sources/SlothCore/Reconnector.swift` — actor with exponential
+  backoff (1 s → 30 s cap, ×2). Sleeper is injectable so tests
+  drive deterministic timing. `reset()` after a successful
+  connect drops the delay back to `initialDelay`.
+- `Sources/SlothCore/SlothLog.swift` — `@MainActor @Observable`
+  in-memory ring (cap 500) mirrored to `os.Logger` so entries
+  also land in Console.app / `log stream`. Carries project
+  metadata only — connection events, parse errors, backoff,
+  scene lifecycle. **Never** carries record content
+  (MISSION §2(5)); the share-sheet export is plain text, not
+  JSONL.
+- `App/ConnectionCoordinator.swift` — now drives a connect-retry
+  loop. On stream end (clean or error) it waits the current
+  `Reconnector` delay, then redials. Cancels cleanly when the
+  Task is cancelled on `.background`. Pulls the active profile
+  from `ProfileStore`; commits a new URI to the store on user
+  Connect.
+- `App/Views/SettingsView.swift` — list of saved profiles with
+  tap-to-activate / swipe-to-delete / swipe-to-edit. "Add
+  profile" opens a sheet-mounted `ProfileEditor` that parses
+  `tcp:HOST:PORT` before saving. Footer reiterates the no-record-
+  persistence rule.
+- `App/Views/DiagnosticsView.swift` — recent log lines with a
+  per-level filter strip and a share-as-text menu that exports
+  the visible window via `ShareLink`. `Clear log` is a
+  destructive button on the same menu (the underlying log is
+  in-memory so this is fine; no record forensic record is
+  destroyed).
+- `App/ContentView.swift` — connection bar gains an
+  `ellipsis.circle` menu (Profiles… / Diagnostics…) presenting
+  the two new screens as sheets. The bar also passes the new
+  `ProfileStore` + `SlothLog` to the coordinator. Scene-phase
+  transitions are logged.
+- `App/SlothIOSApp.swift` — `@State` for `SlothStore`,
+  `ProfileStore`, and `SlothLog`; all three injected into the
+  environment so every view can `@Environment(...)` per
+  CLAUDE.md.
+
+**Tests**: 16 new (115 total, all green).
+- `ProfileStoreTests` — add / remove (active vs non-active),
+  setActive, update preserves id, persistence round-trip via a
+  scoped `UserDefaults` suite, legacy M1 single-profile upgrade
+  path.
+- `ReconnectorTests` — backoff progression (1, 2, 4, 8, 16, 30),
+  reset behaviour, custom initial / multiplier, propagated
+  sleeper error.
+- `SlothLogTests` — level / category / message round-trip, ring
+  cap eviction, clear, export text shape.
+
+**Verification**:
+- `swift test` — 115/115 green.
+- `xcodebuild build` — iPhone 17 Pro and iPad Pro 13-inch (M5)
+  simulators both clean.
+- Manual: iPhone shows the new ellipsis menu in the connection
+  bar; iPad dashboard composite still renders with the menu on
+  the bar above. Saved-profile UI verified via the simulator.
+
+**Why**: M8 closes the production-quality lifecycle gap.
+Multi-profile lets an operator switch sloth instances without
+re-typing the URI. Exponential-backoff retry survives
+flaky-network handoffs without burning battery on a tight loop.
+OSLog diagnostics let a remote operator capture "what just
+happened" without attaching a debugger.
+
+**Follow-ups**:
+- M6 (Connections + RTT) is the remaining milestone, still gated
+  on sloth emitting a `connections` JSONL record.
+- Adjacent v1.x vectors per the milestones doc: macOS Catalyst
+  pass, per-host pin, Stage Manager polish.
 
 ### 2026-05-27 — M7: Composite dashboard (iPad-first)
 **Commits**: *(this entry lands with the commit)*

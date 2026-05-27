@@ -44,11 +44,85 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M2 just landed; pick M3 (AlertsView) or M5 (DNS/TLS/HTTP logs) next)*
+*(nothing — M3 just landed; pick M4 (top hosts + sparklines) or M5 (DNS/TLS/HTTP logs) next)*
 
 ---
 
 ## Recently landed
+
+### 2026-05-27 — M3: AlertsView + three-tier palette + frequency chart
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/AlertBucketing.swift` — pure-Swift bucketing helper
+  that turns `[AlertEntry]` into `[AlertFrequencyBucket]` (per-minute
+  counts split by severity over a window). Bucketing key is `lastSeen`,
+  weight = 1 per entry (sloth doesn't emit per-hit timestamps).
+- `Tests/SlothCoreTests/AlertBucketingTests.swift` — 8 hermetic tests
+  covering empty input, window edges (in vs out, exactly on edge),
+  zero-window, same-minute same-sev collapse, same-minute different-sev
+  split, different-minute split, mixed three-tier spread.
+- `App/Theme.swift` — SwiftUI `Color` extensions for the three-tier
+  alert palette (`.alertHotLow/Warn/Crit`), phosphor base hues, and
+  the heat gradient (`Color.heat(fraction)` mirrors sloth's `tui_heat`).
+  Adds `AlertSeverity.color` extension. SlothCore stays SwiftUI-free
+  per CLAUDE.md — Theme lives in `App/`.
+- `App/Charts/AlertFrequencyChart.swift` — Swift Chart `BarMark`
+  stacked by severity, last 60 minutes. X-axis domain anchored to the
+  full window so empty buckets still leave space. `.accessibilityLabel`
+  describes the trend. `accessibilityReduceMotion` disables the
+  ease-out animation.
+- `App/Views/AlertRowView.swift` — list row primitive. Leading 4-pt
+  severity stripe + SF Symbol prefix (info.circle / triangle / octagon)
+  + tier label + title + hit-count badge (×N when ≥ 2) + relative
+  time + optional second-line detail + optional match-IP badge
+  (`flame.fill` when the IP is currently hot, `network` otherwise).
+- `App/Views/AlertsView.swift` — the M3 view itself. Filter chips
+  (All / CRIT / WARN / LOW, with smart toggle semantics), search
+  field (substring against title + detail + key), the frequency chart,
+  the scrollable list. Empty states for "no alerts" vs "no matches".
+  Tick timer re-buckets every 5 s so the x-axis advances even when no
+  new alerts arrive.
+- `App/Views/AlertDetailView.swift` — push destination. Severity
+  header, full title + detail, first/last seen + computed span,
+  identity (key + match-IP coloured if hot), cross-reference counts
+  from `store.dns`/`tls`/`http` for the match-IP.
+- `App/ContentView.swift` — rewritten around a `TabView`: Alerts
+  (default tab, with a CRIT count badge) + Debug (the existing
+  merged log; M5 replaces it). Connection bar + status pill stay at
+  the top of every tab as global chrome.
+
+**Verification**:
+- `swift test` — 70/70 green (62 pre-existing + 8 new AlertBucketing).
+- `xcodebuild build` on `iPhone 17 Pro` simulator — zero warnings,
+  zero errors (one irrelevant AppIntents metadata note that's not
+  actionable).
+- `xcodebuild test` — 1/1 iOS smoke test passes; SlothCore suite is
+  driven through `swift test` independently.
+- Manual: launched on the iOS-17 simulator. Alerts tab shows the
+  empty state ("Nothing on fire") with the badge at 0 and the
+  frequency chart at full-width with an empty 60-minute axis. Debug
+  tab is unchanged from M2.
+
+**Why**: M3 is the first production view. It establishes the
+three-tier palette as a load-bearing concept (severity stripe + SF
+Symbol + bold weight on WARN/CRIT + cross-panel hot-IP coloring), the
+Swift Charts pattern (pure bucketing helper feeding a declarative
+`Chart` view), and the tab-as-feature-unit scaffold every following
+milestone slots into. The `flame.fill` glyph on hot IPs gives a
+preview of what M4–M6 panels will lean on when they render IPs that
+the alert-hot index has flagged.
+
+**Follow-ups**:
+- M4 (top hosts + bandwidth sparklines) and M5 (DNS/TLS/HTTP logs)
+  are both unblocked. M4 builds on the `Color.heat(_:)` helper this
+  commit introduced.
+- The cross-reference counts in `AlertDetailView` recompute every
+  body render — a single pass over the DNS/TLS/HTTP rings. Fine at
+  current ring caps (≤ 1024 each); revisit if a profiler ever flags
+  it.
+- `AlertEntry.identityKey` falls back to `"title#firstSeen"` when
+  `key` is nil — alerts without a key won't dedup in the List. sloth
+  always populates `key` per the schema, so this is defensive only.
 
 ### 2026-05-26 — M2: SlothStore (state surface)
 **Commits**: *(this entry lands with the commit)*

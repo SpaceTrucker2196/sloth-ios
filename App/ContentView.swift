@@ -8,7 +8,9 @@
 // content so the operator sees the live rec/s + tier counts from
 // every screen.
 //
-// M6 adds a Connections tab once sloth emits connection JSONL records.
+// Settings + Diagnostics (M8) present as sheets from the connection
+// bar's gear icon. M6 adds a Connections tab once sloth emits
+// connection JSONL records.
 
 import SwiftUI
 import SlothCore
@@ -16,14 +18,23 @@ import SlothCore
 struct ContentView: View {
 
     @Environment(SlothStore.self)        private var store
+    @Environment(ProfileStore.self)      private var profileStore
+    @Environment(SlothLog.self)          private var log
     @Environment(\.scenePhase)           private var scenePhase
     @Environment(\.horizontalSizeClass)  private var hSize
     @State private var coordinator: ConnectionCoordinator?
+    @State private var showSettings    = false
+    @State private var showDiagnostics = false
 
     var body: some View {
         VStack(spacing: 0) {
             if let coordinator {
-                ConnectionBar(coordinator: coordinator, store: store)
+                ConnectionBar(
+                    coordinator: coordinator,
+                    store: store,
+                    onSettings:    { showSettings = true },
+                    onDiagnostics: { showDiagnostics = true }
+                )
                 SystemPulseChip(
                     state:           store.connectionState,
                     recordsReceived: store.recordsReceived,
@@ -38,20 +49,37 @@ struct ContentView: View {
         }
         .task {
             if coordinator == nil {
-                coordinator = ConnectionCoordinator(store: store)
+                coordinator = ConnectionCoordinator(
+                    store:        store,
+                    profileStore: profileStore,
+                    log:          log
+                )
             }
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
+                log.info("app", "scene active")
                 if case .disconnected = store.connectionState {
                     coordinator?.connect()
                 }
             case .background:
+                log.info("app", "scene backgrounded — cancelling connect loop")
                 coordinator?.disconnect()
             default:
                 break
             }
+        }
+        .onChange(of: profileStore.activeID) { _, _ in
+            coordinator?.loadActiveIntoDraft()
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environment(profileStore)
+        }
+        .sheet(isPresented: $showDiagnostics) {
+            DiagnosticsView()
+                .environment(log)
         }
     }
 
@@ -93,20 +121,40 @@ private struct ConnectionBar: View {
 
     @Bindable var coordinator: ConnectionCoordinator
     let store: SlothStore
+    let onSettings:    () -> Void
+    let onDiagnostics: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            TextField("tcp:HOST:PORT", text: $coordinator.profileURI)
+            TextField("tcp:HOST:PORT", text: $coordinator.draftURI)
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .onSubmit(coordinator.connect)
             Button(action: coordinator.connect) {
-                Label(buttonLabel, systemImage: "antenna.radiowaves.left.and.right")
-                    .labelStyle(.iconOnly)
+                Image(systemName: "antenna.radiowaves.left.and.right")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
+            .accessibilityLabel(buttonLabel)
+
+            Menu {
+                Button {
+                    onSettings()
+                } label: {
+                    Label("Profiles…", systemImage: "person.crop.circle")
+                }
+                Button {
+                    onDiagnostics()
+                } label: {
+                    Label("Diagnostics…", systemImage: "stethoscope")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .imageScale(.large)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityLabel("More")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -133,4 +181,6 @@ private struct ConnectionBar: View {
 #Preview {
     ContentView()
         .environment(SlothStore())
+        .environment(ProfileStore())
+        .environment(SlothLog())
 }

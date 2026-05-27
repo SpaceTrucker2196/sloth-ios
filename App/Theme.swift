@@ -58,6 +58,22 @@ extension AlertSeverity {
     }
 }
 
+// MARK: - ShapeStyle dot-shorthand
+
+// Makes `foregroundStyle(.alertHotWarn)` (and friends) resolve to the
+// project's Color extensions. Without this, the dot-shorthand only
+// reaches SwiftUI's built-in ShapeStyle members (`.red`, `.secondary`,
+// etc.) and the typo-looking "type 'ShapeStyle' has no member
+// 'alertHotWarn'" appears at every call site.
+extension ShapeStyle where Self == Color {
+    static var alertHotLow:    Color { .alertHotLow }
+    static var alertHotWarn:   Color { .alertHotWarn }
+    static var alertHotCrit:   Color { .alertHotCrit }
+    static var phosphorBright: Color { .phosphorBright }
+    static var phosphorTeal:   Color { .phosphorTeal }
+    static var phosphorDim:    Color { .phosphorDim }
+}
+
 /// Brand-name hostname colouring. Case-insensitive substring match,
 /// mirroring sloth's `tui_brand_addstr`. Returns `nil` for hostnames
 /// with no brand match — callers fall back to their default tint.
@@ -70,6 +86,32 @@ enum Theme {
         }
         return nil
     }
+
+    /// Deterministic colour for a JA3 hex string. Same JA3 → same
+    /// colour everywhere (cross-host correlation cue, mirrors
+    /// sloth's hash-coloured JA3 prefixes). Empty / nil → secondary.
+    static func ja3Color(_ ja3: String?) -> Color {
+        guard let s = ja3, !s.isEmpty else { return .secondary }
+        var hash: UInt64 = 5_381
+        for byte in s.utf8 {
+            hash = hash &* 33 &+ UInt64(byte)
+        }
+        return ja3Palette[Int(hash % UInt64(ja3Palette.count))]
+    }
+
+    /// 8-colour phosphor palette mirroring sloth's IP hash slots
+    /// (docs/wiki/theme.md). Warm-leaning so JA3 tags don't clash
+    /// with the alert tier hues when both appear in the same row.
+    private static let ja3Palette: [Color] = [
+        Color(red: 0.00,  green: 1.00,  blue: 0.843), // #00FFD7
+        Color(red: 0.373, green: 0.843, blue: 0.843), // #5FD7D7
+        Color(red: 0.529, green: 1.00,  blue: 0.686), // #87FFAF
+        Color(red: 0.686, green: 1.00,  blue: 0.529), // #AFFF87
+        Color(red: 0.843, green: 0.686, blue: 0.00),  // #D7AF00
+        Color(red: 1.00,  green: 0.686, blue: 0.373), // #FFAF5F
+        Color(red: 0.843, green: 0.529, blue: 0.529), // #D78787
+        Color(red: 0.529, green: 0.686, blue: 0.843), // #87AFD7
+    ]
 
     /// Order matters: longer / more-specific needles first so
     /// `cloudflare` wins over a hypothetical `cloud`.

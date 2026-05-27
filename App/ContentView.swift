@@ -1,13 +1,15 @@
-// ContentView — M3 split: connection chrome stays at the top, content
-// area becomes a TabView. M3 ships `AlertsView` as the first tab; the
-// pre-existing `DebugLogView` stays as a second "Debug" tab so other
-// ring types are still visible until M5 lands per-category views.
+// ContentView — connection chrome stays at the top, content area is
+// a `TabView`. M5 brings the tab roster to its post-`DebugLogView`
+// shape:
 //
-// As the milestones progress, new tabs land in this TabView:
-//   M4 — Top hosts
-//   M5 — DNS / TLS / HTTP (3 tabs, replaces the Debug tab)
-//   M6 — Connections
-//   M7 — Composite Dashboard (becomes tab 1; Alerts moves to tab 2)
+//   Alerts — M3
+//   Hosts  — M4
+//   DNS    — M5
+//   TLS    — M5
+//   HTTP   — M5
+//
+// M6 adds Connections; M7 composites the lot into a single
+// `DashboardView` that becomes tab 1.
 
 import SwiftUI
 import SlothCore
@@ -37,14 +39,20 @@ struct ContentView: View {
                         Label("Hosts", systemImage: "globe.americas")
                     }
 
-                NavigationStack {
-                    DebugLogView()
-                        .navigationTitle("Debug log")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-                .tabItem {
-                    Label("Debug", systemImage: "waveform.path.ecg")
-                }
+                NavigationStack { DNSLogView() }
+                    .tabItem {
+                        Label("DNS", systemImage: "questionmark.bubble")
+                    }
+
+                NavigationStack { TLSLogView() }
+                    .tabItem {
+                        Label("TLS", systemImage: "lock")
+                    }
+
+                NavigationStack { HTTPLogView() }
+                    .tabItem {
+                        Label("HTTP", systemImage: "globe")
+                    }
             }
         }
         .task {

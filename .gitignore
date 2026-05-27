@@ -28,5 +28,8 @@ build/
 .idea/
 *.swp
 
+# Claude Code session state
+.claude/
+
 # Logs
 *.log

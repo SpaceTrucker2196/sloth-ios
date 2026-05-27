@@ -44,11 +44,88 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M4 just landed; pick M5 (DNS/TLS/HTTP logs) or M6 (Connections) next)*
+*(nothing — M5 just landed; pick M6 (Connections) next, or wait for sloth's connection JSONL records)*
 
 ---
 
 ## Recently landed
+
+### 2026-05-27 — M5: DNS, TLS, HTTP log views
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/LogFilter.swift` — pure substring matcher,
+  case-insensitive, multi-word AND, applied across a caller-
+  supplied list of haystack fields. Mirrors sloth's `filter.c`
+  semantics.
+- `Sources/SlothCore/LogStats.swift` — `QTypeDistribution.shares`
+  (slice-per-qtype with "other" rollup for the DNS pie) +
+  `TLSVersionMix.shares` (TLS version share with stable colour
+  order across frames + `isDeprecated(...)` for the 1.0 / 1.1
+  WARN tinting).
+- `Tests/SlothCoreTests/LogFilterTests.swift` — 15 hermetic tests
+  covering empty / case-insensitive / multi-word substring +
+  qtype canonicalisation + TLS version canonicalisation + the
+  deprecated flag. 99/99 total `swift test` green.
+- `App/Views/FilterBar.swift` — reusable chip strip + search
+  field. Generic over a `Hashable` chip id; caller supplies the
+  chip labels + tints. Owns no filtering itself, just rendering.
+- `App/Views/DNSLogView.swift` — Q / R direction chips, qtype
+  pie at the top, list with brand-coloured qnames, NXDOMAIN
+  highlighting, alert-hot src / answer IPs taking on their tier
+  hue via `AlertHotIndex`.
+- `App/Views/TLSLogView.swift` — "TLS 1.0 / 1.1" filter chip,
+  the stacked version-mix bar, JA3 prefix coloured by hash so
+  the same JA3 across hosts pops as a correlation cue. WARN tint
+  on deprecated tiers without waiting for an alert.
+- `App/Views/HTTPLogView.swift` — GET / POST / Other chips, no
+  chart (HTTP today is dominated by captive-portal noise; a
+  method-distribution chart would be uninformative). Row-side
+  heuristic that highlights classic recon paths (`.git/`,
+  `.env`, `/wp-admin`, …) in CRIT red *before* sloth flags them.
+- `App/Charts/QTypeDistributionChart.swift` — donut summary at
+  the top of `DNSLogView`. Stable per-qtype colour. Annotations
+  on slice; legend hidden. Animation disabled under
+  `accessibilityReduceMotion`.
+- `App/Charts/TLSVersionMixChart.swift` — stacked horizontal
+  `BarMark`, single bar visualising proportions. WARN tint on
+  TLS 1.0 / 1.1 segments. Custom legend below with hit counts.
+- `App/Theme.swift` — adds `Theme.ja3Color(_:)` (hash → 8-colour
+  warm-leaning phosphor palette) + an `extension ShapeStyle
+  where Self == Color` so `foregroundStyle(.alertHotWarn)` and
+  friends resolve. Without that, the dot-shorthand only sees
+  SwiftUI's built-ins and the rows fail to compile.
+- `App/ContentView.swift` — `DebugLogView` tab dropped; the
+  TabView is now Alerts / Hosts / DNS / TLS / HTTP.
+- `App/Views/DebugLogView.swift` — **deleted**. Its M2 → M3
+  bridge job is done; the per-category views replace its three
+  ring sources.
+
+**Verification**:
+- `swift test` — 99/99 green (84 pre-existing + 15 new
+  LogFilter / LogStats).
+- `xcodebuild build` on iPhone 17 Pro simulator — zero errors.
+- Manual: launches to the Alerts tab; tab bar shows all five
+  tabs with their SF Symbols (`exclamationmark.triangle`,
+  `globe.americas`, `questionmark.bubble`, `lock`, `globe`).
+  Each per-log tab shows its empty state ("No DNS records",
+  "No TLS handshakes", "No HTTP traffic") with explanatory
+  text until traffic flows.
+
+**Why**: M5 turns the merged debug log into three operator-
+ready surfaces, each with its own filter axes and its own
+summary chart. The cross-panel hot-IP coloring established in
+M3 is now wired through DNS / TLS / HTTP rows too — an IP
+flagged in any alert renders in the alert's tier hue everywhere
+it appears, mirroring sloth's `tui_alert_hot_*` rule.
+
+**Follow-ups**:
+- The HTTP attack-path heuristic is a small client-side cue,
+  not a replacement for sloth's `HTTP_ATTACK_PATH` alert. When
+  sloth emits that alert the row's CRIT tint comes through the
+  `AlertHotIndex` path; the heuristic acts before the alert
+  fires.
+- M6 (Connections + RTT) may block on a sloth-side `connections`
+  JSONL record; file the gap there when picking up M6.
 
 ### 2026-05-27 — M4: TopHostsView + activity sparklines + protocol stack chart
 **Commits**: *(this entry lands with the commit)*

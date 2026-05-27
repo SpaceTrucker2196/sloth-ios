@@ -44,7 +44,11 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M8 just landed; M6 (Connections) remains blocked on a sloth-side JSONL record. v1.0 line is feature-complete pending M6)*
+*(nothing — M8 just landed; the v1.0 line is feature-complete pending M6.)*
+
+**M6 blocker**: tracked upstream as
+[sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5). Pick
+M6 back up once sloth emits a `connections` JSONL record.
 
 ---
 
@@ -125,7 +129,8 @@ happened" without attaching a debugger.
 
 **Follow-ups**:
 - M6 (Connections + RTT) is the remaining milestone, still gated
-  on sloth emitting a `connections` JSONL record.
+  on sloth emitting a `connections` JSONL record. Tracked upstream
+  as [sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5).
 - Adjacent v1.x vectors per the milestones doc: macOS Catalyst
   pass, per-host pin, Stage Manager polish.
 

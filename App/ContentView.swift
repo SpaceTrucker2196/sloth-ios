@@ -1,7 +1,13 @@
-// ContentView — M2 debug surface. Profile entry + status pill + a
-// merged scrolling log fed by `SlothStore`. M3 replaces the merged
-// log with the dedicated `AlertsView`; per-category log views land
-// in M5; the composite dashboard lands in M7.
+// ContentView — M3 split: connection chrome stays at the top, content
+// area becomes a TabView. M3 ships `AlertsView` as the first tab; the
+// pre-existing `DebugLogView` stays as a second "Debug" tab so other
+// ring types are still visible until M5 lands per-category views.
+//
+// As the milestones progress, new tabs land in this TabView:
+//   M4 — Top hosts
+//   M5 — DNS / TLS / HTTP (3 tabs, replaces the Debug tab)
+//   M6 — Connections
+//   M7 — Composite Dashboard (becomes tab 1; Alerts moves to tab 2)
 
 import SwiftUI
 import SlothCore
@@ -13,17 +19,28 @@ struct ContentView: View {
     @State private var coordinator: ConnectionCoordinator?
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if let coordinator {
-                    ConnectionBar(coordinator: coordinator, store: store)
-                } else {
-                    ProgressView().padding()
-                }
-                DebugLogView()
+        VStack(spacing: 0) {
+            if let coordinator {
+                ConnectionBar(coordinator: coordinator, store: store)
+            } else {
+                ProgressView().padding()
             }
-            .navigationTitle("sloth")
-            .navigationBarTitleDisplayMode(.inline)
+            TabView {
+                NavigationStack { AlertsView() }
+                    .tabItem {
+                        Label("Alerts", systemImage: "exclamationmark.triangle")
+                    }
+                    .badge(critBadge)
+
+                NavigationStack {
+                    DebugLogView()
+                        .navigationTitle("Debug log")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+                .tabItem {
+                    Label("Debug", systemImage: "waveform.path.ecg")
+                }
+            }
         }
         .task {
             if coordinator == nil {
@@ -42,6 +59,13 @@ struct ContentView: View {
                 break
             }
         }
+    }
+
+    /// Surface unresolved CRIT alerts on the Alerts tab — the
+    /// "something is on fire" cue without needing to be on that tab.
+    /// 0 → no badge.
+    private var critBadge: Int {
+        store.alerts.filter { $0.severity == .crit }.count
     }
 }
 

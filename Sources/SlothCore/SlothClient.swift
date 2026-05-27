@@ -16,8 +16,8 @@
 //   * iOS reaps the socket on background; the caller cancels the
 //     stream and re-opens on foreground.
 
-@preconcurrency import Network
 import Foundation
+import Network
 
 // MARK: - Transport seam
 

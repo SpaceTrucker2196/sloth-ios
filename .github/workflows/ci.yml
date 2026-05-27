@@ -1,0 +1,80 @@
+# Build + test gate for sloth-ios.
+#
+# Runs `swift test` on the headless `SlothCore` package and
+# `xcodebuild test` on the iOS app target. CLAUDE.md commits to both
+# returning 0 on every commit landing on main; this workflow makes
+# that contract enforceable on every PR.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: swift test + xcodebuild test
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest installed Xcode
+        # xcodegen ≥ 2.45 writes the Xcode-16 project format. An older
+        # xcodebuild rejects it ("future Xcode project file format 77"),
+        # so we pin the newest Xcode installed on the runner image
+        # rather than whatever /Applications/Xcode.app points at.
+        run: |
+          set -euo pipefail
+          XCODE_APP=$(ls -d /Applications/Xcode_*.app 2>/dev/null \
+            | sort -V | tail -n 1)
+          if [ -z "$XCODE_APP" ]; then XCODE_APP=/Applications/Xcode.app; fi
+          echo "Using $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: SlothCore — swift test
+        run: swift test
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: xcodegen generate
+
+      - name: Pick an available iOS simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          NAME=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          for runtime, devices in data["devices"].items():
+              if "iOS" not in runtime:
+                  continue
+              for d in devices:
+                  if d.get("isAvailable") and d.get("name", "").startswith("iPhone"):
+                      print(d["name"])
+                      raise SystemExit(0)
+          raise SystemExit("no available iOS simulator")
+          ')
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Picked simulator: $NAME"
+
+      - name: SlothIOS — xcodebuild test
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -scheme SlothIOS \
+            -project SlothIOS.xcodeproj \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            test

@@ -57,11 +57,15 @@ public final class SlothStore {
     public let alertHot: AlertHotIndex
 
     public init(
-        sizes:    RingSizes      = .default,
-        alertHot: AlertHotIndex  = AlertHotIndex()
+        sizes:    RingSizes     = .default,
+        alertHot: AlertHotIndex? = nil
     ) {
+        // Defaulting `alertHot` to `AlertHotIndex()` directly at the
+        // parameter site trips a Swift 5.10 IRGen crash (signal 11)
+        // when SlothStore is `@MainActor @Observable`. Constructing
+        // inside the body sidesteps it and is otherwise identical.
         self.sizes    = sizes
-        self.alertHot = alertHot
+        self.alertHot = alertHot ?? AlertHotIndex()
     }
 
     // MARK: - Ingest

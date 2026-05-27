@@ -44,11 +44,82 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M3 just landed; pick M4 (top hosts + sparklines) or M5 (DNS/TLS/HTTP logs) next)*
+*(nothing — M4 just landed; pick M5 (DNS/TLS/HTTP logs) or M6 (Connections) next)*
 
 ---
 
 ## Recently landed
+
+### 2026-05-27 — M4: TopHostsView + activity sparklines + protocol stack chart
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/HostAggregator.swift` — pure aggregator that
+  turns the store's rings into a `TopHostsSnapshot` (top 32 external
+  hosts by record count). Skips RFC1918, loopback, link-local,
+  multicast (v4 + v6) so the list focuses on external traffic, per
+  `src/top_hosts.c`. Per-IP per-minute sparkline samples (30 bins ×
+  60s). Hostname resolved via the store's DNS cache (most-recent
+  A/AAAA answer wins). JA3 set collected from TLS records.
+  **Schema substitution**: sloth's JSONL emits protocol logs but
+  no byte counters; rate samples are therefore *records / minute*
+  rather than *bytes / minute*. When sloth grows a `bw` record the
+  data source can swap without UI changes.
+- `Tests/SlothCoreTests/HostAggregatorTests.swift` — 14 hermetic
+  tests covering external/internal IP discrimination (v4 + v6
+  edges, 172.16/12 boundary), per-minute bucketing,
+  out-of-window drop, per-protocol merging, sort order,
+  `topN` cap.
+- `App/Theme.swift` — `Theme.brand(for: hostname)` lookup table
+  (cloudflare/google/firefox/cloudflare/etc.) mirroring sloth's
+  `tui_brand_addstr`. Order matters in the table — longer needles
+  first so `cloudflare` wins over a hypothetical `cloud`.
+- `App/Charts/BandwidthSparkline.swift` — reusable inline chart.
+  Pure `[Double]` series; heat-grades the trace by value when no
+  caller-tint is given (`Color.heat` from M3). Hidden axes; fits
+  any frame. Will be reused by M6 connections (RTT) and M7
+  composite dashboard. `accessibilityReduceMotion` respected.
+- `App/Views/TopHostsView.swift` — the new tab. Top section is a
+  `ProtocolStackChart` (stacked `AreaMark`s for TLS/QUIC/DNS/HTTP
+  shares across hosts so the operator sees "what kind of traffic
+  is this" at a glance). Below: list of hosts with a per-row
+  sparkline, brand-coloured hostname when known, alert-hot
+  override (flame.fill + severity tier hue) when the hot index
+  flags the row's IP.
+- `App/Views/TopHostDetailView.swift` — push destination. Larger
+  sparkline, per-protocol breakdown bars, JA3 fingerprint list,
+  recent qnames that resolved to this IP.
+- `App/ContentView.swift` — Hosts tab added between Alerts and
+  Debug.
+
+**Verification**:
+- `swift test` — 84/84 green (70 pre-existing + 14 new HostAggregator).
+- `xcodebuild build` on iPhone 17 Pro simulator — zero errors, the
+  one irrelevant AppIntents metadata note.
+- Manual: launches with three tabs (Alerts / Hosts / Debug). Hosts
+  tab shows the empty state ("No external hosts yet") with the
+  filter rationale until traffic flows.
+
+**Why**: M4 ships the second production view and lands two
+load-bearing pieces the next milestones inherit: a reusable
+`BandwidthSparkline` (M6 uses it for RTT, M7 for dashboard tiles)
+and the hostname brand-colouring helper (M5 logs apply it to SNI
+and HTTP host columns). Spec called for "bandwidth bytes" but
+sloth doesn't emit byte counters in JSONL — substituted
+records-per-minute as an honest activity proxy. Documented the
+substitution prominently so it doesn't become a hidden lie.
+
+**Follow-ups**:
+- **sloth-side schema gap**: per-host or per-conn byte counters in
+  the JSONL stream would let this view show real bandwidth instead
+  of record rate. File an issue on the sloth repo when picking
+  this up.
+- Brand table is hardcoded; would be nicer as a JSON resource that
+  reloads without a rebuild. Low priority — operator preferences
+  rarely change.
+- The `ProtocolStackChart` weights bins by each host's per-protocol
+  share rather than tracking per-protocol bins independently. Loses
+  fidelity when a host's mix changes mid-window. Trade-off accepted
+  to keep `HostActivity` small (15 floats per host vs. 60).
 
 ### 2026-05-27 — M3: AlertsView + three-tier palette + frequency chart
 **Commits**: *(this entry lands with the commit)*

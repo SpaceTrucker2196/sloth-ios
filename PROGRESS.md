@@ -44,11 +44,60 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M5 just landed; pick M6 (Connections) next, or wait for sloth's connection JSONL records)*
+*(nothing — M7 just landed; M6 is blocked on sloth-side connection records, M8 is unblocked next)*
 
 ---
 
 ## Recently landed
+
+### 2026-05-27 — M7: Composite dashboard (iPad-first)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `App/Views/DashboardView.swift` — 2×2 `Grid` of `DashboardCard`s
+  tiling Alerts / Top hosts / DNS / TLS. Each tile embeds its
+  production view (M3 / M4 / M5) inside its own `NavigationStack`
+  so push destinations (alert detail, host detail) still work
+  from within the tile.
+- `App/Views/DashboardCard.swift` — reusable card wrapper. Thin
+  title bar (icon + label) over a rounded-rectangle content area
+  with a quaternary border. Static; no pinch / drag (per spec).
+- `App/Views/SystemPulseChip.swift` — at-a-glance health bar.
+  Shows status pill + `rec/s` readout (1-second sampled delta of
+  `recordsReceived`) + one dot+count per severity tier
+  (CRIT / WARN / LOW). Visible on every screen — slots between
+  the connection bar and the content area.
+- `App/ContentView.swift` — switches on `horizontalSizeClass`:
+  `.regular` (iPad, large iPhone landscape) → `DashboardView`,
+  `.compact` (iPhone) → existing TabView. Connection bar
+  compacted to a single row (text field + connect button) since
+  the system-pulse chip now carries the status pill.
+
+**Verification**:
+- `swift test` — 99/99 green (no new SlothCore code).
+- `xcodebuild build` on iPhone 17 Pro simulator — clean.
+- `xcodebuild build` on iPad Pro 13-inch (M5) simulator — clean.
+- Manual on iPad portrait: dashboard renders the four tiles
+  with their empty states, system pulse shows `idle / 0.0/s /
+  0 0 0`. iPhone retains the 5-tab TabView with the same pulse
+  chip above the tabs.
+
+**Why**: M7 is the payoff of M3–M5. The same alerts / hosts /
+log views the operator scrolls separately on iPhone tile into a
+single iPad screen, mirroring sloth's static TUI composite —
+one glance answers "what is on this network right now". The
+system-pulse chip carries the TUI's header row so the operator
+gets live rec/s + tier counts from every screen.
+
+**Follow-ups**:
+- M6 (Connections + RTT) is still gated on sloth emitting a
+  `connections` JSONL record. When that lands, add a fifth tile
+  to the dashboard grid (3×2 layout, or move Top hosts adjacent
+  to Connections so the flow → host correlation reads left-to-
+  right).
+- M8 (Polish / multi-profile / reconnect) is unblocked next.
+  StatusPill on every nav bar is partially done by the
+  `SystemPulseChip`; the rest of M8 (saved profiles, OSLog
+  diagnostics view, exponential-backoff `Reconnector`) is open.
 
 ### 2026-05-27 — M5: DNS, TLS, HTTP log views
 **Commits**: *(this entry lands with the commit)*

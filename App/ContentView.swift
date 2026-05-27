@@ -1,29 +1,43 @@
-// ContentView — M1 debug surface. Profile entry + status pill + a
-// scrolling log of every record arriving over the wire. M2 replaces
-// the log with per-category panels backed by `SlothStore`.
+// ContentView — M2 debug surface. Profile entry + status pill + a
+// merged scrolling log fed by `SlothStore`. M3 replaces the merged
+// log with the dedicated `AlertsView`; per-category log views land
+// in M5; the composite dashboard lands in M7.
 
 import SwiftUI
 import SlothCore
 
 struct ContentView: View {
-    @State private var controller = DebugLogController()
-    @Environment(\.scenePhase) private var scenePhase
+
+    @Environment(SlothStore.self) private var store
+    @Environment(\.scenePhase)    private var scenePhase
+    @State private var coordinator: ConnectionCoordinator?
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                ConnectionBar(controller: controller)
-                DebugLogList(lines: controller.lines)
+                if let coordinator {
+                    ConnectionBar(coordinator: coordinator, store: store)
+                } else {
+                    ProgressView().padding()
+                }
+                DebugLogView()
             }
             .navigationTitle("sloth")
             .navigationBarTitleDisplayMode(.inline)
         }
+        .task {
+            if coordinator == nil {
+                coordinator = ConnectionCoordinator(store: store)
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
-                if case .disconnected = controller.state { controller.connect() }
+                if case .disconnected = store.connectionState {
+                    coordinator?.connect()
+                }
             case .background:
-                controller.disconnect()
+                coordinator?.disconnect()
             default:
                 break
             }
@@ -32,25 +46,32 @@ struct ContentView: View {
 }
 
 private struct ConnectionBar: View {
-    @Bindable var controller: DebugLogController
+
+    @Bindable var coordinator: ConnectionCoordinator
+    let store: SlothStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                StatusPill(state: controller.state)
+                StatusPill(state: store.connectionState)
                 Spacer()
-                Button(action: controller.connect) {
+                if store.recordsReceived > 0 {
+                    Text("\(store.recordsReceived) rec")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Button(action: coordinator.connect) {
                     Label(buttonLabel, systemImage: "antenna.radiowaves.left.and.right")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             }
-            TextField("tcp:HOST:PORT", text: $controller.profileURI)
+            TextField("tcp:HOST:PORT", text: $coordinator.profileURI)
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
-                .onSubmit(controller.connect)
-            if let err = controller.lastError {
+                .onSubmit(coordinator.connect)
+            if let err = coordinator.parseError ?? store.lastError {
                 Text(err)
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -61,7 +82,7 @@ private struct ConnectionBar: View {
     }
 
     private var buttonLabel: String {
-        switch controller.state {
+        switch store.connectionState {
         case .connected, .connecting: return "Reconnect"
         default: return "Connect"
         }
@@ -69,7 +90,8 @@ private struct ConnectionBar: View {
 }
 
 private struct StatusPill: View {
-    let state: DebugLogController.ConnectionState
+
+    let state: SlothStore.ConnectionState
 
     var body: some View {
         HStack(spacing: 6) {
@@ -85,10 +107,10 @@ private struct StatusPill: View {
 
     private var label: String {
         switch state {
-        case .idle:                       return "idle"
-        case .connecting:                 return "connecting"
-        case .connected:                  return "connected"
-        case .disconnected(let reason):   return reason.map { "disc: \($0)" } ?? "disconnected"
+        case .idle:                   return "idle"
+        case .connecting:             return "connecting"
+        case .connected:              return "connected"
+        case .disconnected(let r):    return r.map { "disc: \($0)" } ?? "disconnected"
         }
     }
 
@@ -102,48 +124,7 @@ private struct StatusPill: View {
     }
 }
 
-private struct DebugLogList: View {
-    let lines: [DebugLogController.Line]
-
-    var body: some View {
-        if lines.isEmpty {
-            ContentUnavailableView(
-                "No records",
-                systemImage: "waveform.path.ecg",
-                description: Text("Records appear here once the sloth socket starts streaming.")
-            )
-        } else {
-            ScrollViewReader { proxy in
-                List(lines) { line in
-                    LogRow(line: line).id(line.id)
-                }
-                .listStyle(.plain)
-                .onChange(of: lines.count) { _, _ in
-                    if let last = lines.last { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-            }
-        }
-    }
-}
-
-private struct LogRow: View {
-    let line: DebugLogController.Line
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(line.typeTag.uppercased())
-                .font(.caption2.monospaced().weight(.semibold))
-                .frame(width: 44, alignment: .leading)
-                .foregroundStyle(.secondary)
-            Text(line.summary)
-                .font(.callout.monospaced())
-                .lineLimit(2)
-            Spacer(minLength: 0)
-        }
-        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-    }
-}
-
 #Preview {
     ContentView()
+        .environment(SlothStore())
 }

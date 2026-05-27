@@ -32,6 +32,11 @@ struct ContentView: View {
                     }
                     .badge(critBadge)
 
+                NavigationStack { TopHostsView() }
+                    .tabItem {
+                        Label("Hosts", systemImage: "globe.americas")
+                    }
+
                 NavigationStack {
                     DebugLogView()
                         .navigationTitle("Debug log")

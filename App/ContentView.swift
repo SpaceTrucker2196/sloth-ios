@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var coordinator: ConnectionCoordinator?
     @State private var showSettings    = false
     @State private var showDiagnostics = false
+    @State private var showDiscovery   = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +33,7 @@ struct ContentView: View {
                 ConnectionBar(
                     coordinator: coordinator,
                     store: store,
+                    onDiscover:    { showDiscovery = true },
                     onSettings:    { showSettings = true },
                     onDiagnostics: { showDiagnostics = true }
                 )
@@ -81,6 +83,11 @@ struct ContentView: View {
             DiagnosticsView()
                 .environment(log)
         }
+        .sheet(isPresented: $showDiscovery) {
+            DiscoveryView()
+                .environment(profileStore)
+                .environment(log)
+        }
     }
 
     @ViewBuilder
@@ -124,6 +131,7 @@ private struct ConnectionBar: View {
 
     @Bindable var coordinator: ConnectionCoordinator
     let store: SlothStore
+    let onDiscover:    () -> Void
     let onSettings:    () -> Void
     let onDiagnostics: () -> Void
 
@@ -134,6 +142,13 @@ private struct ConnectionBar: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .onSubmit(coordinator.connect)
+            Button(action: onDiscover) {
+                Image(systemName: "wifi.router")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Discover sloth on local network")
+
             Button(action: coordinator.connect) {
                 Image(systemName: "antenna.radiowaves.left.and.right")
             }
@@ -142,6 +157,11 @@ private struct ConnectionBar: View {
             .accessibilityLabel(buttonLabel)
 
             Menu {
+                Button {
+                    onDiscover()
+                } label: {
+                    Label("Discover…", systemImage: "wifi.router")
+                }
                 Button {
                     onSettings()
                 } label: {

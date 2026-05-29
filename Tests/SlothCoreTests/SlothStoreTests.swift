@@ -23,12 +23,27 @@ final class SlothStoreTests: XCTestCase {
         store.ingest(.http (HTTPEntry (ts: 4)))
         store.ingest(.ntp  (NTPEntry  (ts: 5)))
         store.ingest(.icmp (ICMPEntry (ts: 6)))
-        XCTAssertEqual(store.dns.count,  1)
-        XCTAssertEqual(store.tls.count,  1)
-        XCTAssertEqual(store.quic.count, 1)
-        XCTAssertEqual(store.http.count, 1)
-        XCTAssertEqual(store.ntp.count,  1)
-        XCTAssertEqual(store.icmp.count, 1)
+        store.ingest(.connections(ConnectionEntry(
+            ts: 7, src: "10.0.0.5:1", dst: "1.1.1.1:443", proto: .tcp
+        )))
+        XCTAssertEqual(store.dns.count,         1)
+        XCTAssertEqual(store.tls.count,         1)
+        XCTAssertEqual(store.quic.count,        1)
+        XCTAssertEqual(store.http.count,        1)
+        XCTAssertEqual(store.ntp.count,         1)
+        XCTAssertEqual(store.icmp.count,        1)
+        XCTAssertEqual(store.connections.count, 1)
+    }
+
+    func testConnectionsRingCaps() {
+        let store = SlothStore(sizes: RingSizes(connections: 3))
+        for i in 0..<5 {
+            store.ingest(.connections(ConnectionEntry(
+                ts: i, src: "10.0.0.5:\(i)", dst: "1.1.1.1:443", proto: .tcp
+            )))
+        }
+        XCTAssertEqual(store.connections.count, 3)
+        XCTAssertEqual(store.connections.map(\.ts), [2, 3, 4])
     }
 
     func testUnknownTypeIncrementsCounterNotRings() {

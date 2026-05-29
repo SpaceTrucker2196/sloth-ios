@@ -24,30 +24,33 @@ public enum SlothRecord: Sendable, Equatable {
     case ntp(NTPEntry)
     case icmp(ICMPEntry)
     case alert(AlertEntry)
+    case connections(ConnectionEntry)
     case unknown(type: String, ts: Int)
 
     public var ts: Int {
         switch self {
-        case .dns  (let e): return e.ts
-        case .tls  (let e): return e.ts
-        case .quic (let e): return e.ts
-        case .http (let e): return e.ts
-        case .ntp  (let e): return e.ts
-        case .icmp (let e): return e.ts
-        case .alert(let e): return e.ts
+        case .dns        (let e): return e.ts
+        case .tls        (let e): return e.ts
+        case .quic       (let e): return e.ts
+        case .http       (let e): return e.ts
+        case .ntp        (let e): return e.ts
+        case .icmp       (let e): return e.ts
+        case .alert      (let e): return e.ts
+        case .connections(let e): return e.ts
         case .unknown(_, let ts): return ts
         }
     }
 
     public var typeTag: String {
         switch self {
-        case .dns:   return "dns"
-        case .tls:   return "tls"
-        case .quic:  return "quic"
-        case .http:  return "http"
-        case .ntp:   return "ntp"
-        case .icmp:  return "icmp"
-        case .alert: return "alert"
+        case .dns:         return "dns"
+        case .tls:         return "tls"
+        case .quic:        return "quic"
+        case .http:        return "http"
+        case .ntp:         return "ntp"
+        case .icmp:        return "icmp"
+        case .alert:       return "alert"
+        case .connections: return "connections"
         case .unknown(let t, _): return t
         }
     }
@@ -72,7 +75,8 @@ extension SlothRecord: Decodable {
         case "http":  self = .http (try HTTPEntry (from: decoder))
         case "ntp":   self = .ntp  (try NTPEntry  (from: decoder))
         case "icmp":  self = .icmp (try ICMPEntry (from: decoder))
-        case "alert": self = .alert(try AlertEntry(from: decoder))
+        case "alert":       self = .alert      (try AlertEntry      (from: decoder))
+        case "connections": self = .connections(try ConnectionEntry (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             self = .unknown(type: tag, ts: ts)
@@ -89,7 +93,8 @@ extension SlothRecord: Encodable {
         case .http (let e): try e.encode(to: encoder)
         case .ntp  (let e): try e.encode(to: encoder)
         case .icmp (let e): try e.encode(to: encoder)
-        case .alert(let e): try e.encode(to: encoder)
+        case .alert      (let e): try e.encode(to: encoder)
+        case .connections(let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
@@ -395,5 +400,107 @@ public struct AlertEntry: Sendable, Codable, Equatable {
         try c.encode(lastSeen,  forKey: .lastSeen)
         try c.encodeIfPresent(matchIP, forKey: .matchIP)
         try c.encode(sev,       forKey: .sev)
+    }
+}
+
+// MARK: - Connections (M6)
+
+/// One JSONL record per active TCP/UDP flow. Schema mirrors the
+/// prompt added to `sloth/PROGRESS.md` (closing sloth#5): per-tick
+/// snapshot keyed by `(src, dst, proto)`. The producer emits one
+/// record per active flow per emit-tick; sloth-ios dedups by the
+/// natural tuple and keeps a small RTT sample series for the
+/// sparkline.
+///
+/// Optional fields per the spec:
+///   * `state` is TCP-only; omit for UDP.
+///   * `rtt_ms` may be omitted for UDP or when sloth has no sample.
+///   * `retx` is TCP-only.
+///   * `age_s` may be omitted in the first sloth pass — the consumer
+///     can compute age from the earliest record it sees for the
+///     tuple if needed.
+public struct ConnectionEntry: Sendable, Codable, Equatable {
+
+    public enum Proto: String, Sendable, Codable, Equatable {
+        case tcp, udp
+    }
+
+    public var type: String { "connections" }
+    public let ts: Int
+    public let src: String
+    public let dst: String
+    public let proto: Proto
+    public let state: String?
+    public let rttMS: Double?
+    public let retx: Int?
+    public let rxBytes: Int
+    public let txBytes: Int
+    public let ageS: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, src, dst, proto, state, retx
+        case rttMS    = "rtt_ms"
+        case rxBytes  = "rx_bytes"
+        case txBytes  = "tx_bytes"
+        case ageS     = "age_s"
+    }
+
+    public init(
+        ts: Int,
+        src: String,
+        dst: String,
+        proto: Proto,
+        state: String? = nil,
+        rttMS: Double? = nil,
+        retx:  Int?    = nil,
+        rxBytes: Int = 0,
+        txBytes: Int = 0,
+        ageS:    Int? = nil
+    ) {
+        self.ts = ts
+        self.src = src
+        self.dst = dst
+        self.proto = proto
+        self.state = state
+        self.rttMS = rttMS
+        self.retx  = retx
+        self.rxBytes = rxBytes
+        self.txBytes = txBytes
+        self.ageS    = ageS
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts       = try c.decode(Int.self,    forKey: .ts)
+        self.src      = try c.decode(String.self, forKey: .src)
+        self.dst      = try c.decode(String.self, forKey: .dst)
+        self.proto    = try c.decode(Proto.self,  forKey: .proto)
+        self.state    = try c.decodeIfPresent(String.self, forKey: .state)
+        self.rttMS    = try c.decodeIfPresent(Double.self, forKey: .rttMS)
+        self.retx     = try c.decodeIfPresent(Int.self,    forKey: .retx)
+        self.rxBytes  = try c.decodeIfPresent(Int.self,    forKey: .rxBytes) ?? 0
+        self.txBytes  = try c.decodeIfPresent(Int.self,    forKey: .txBytes) ?? 0
+        self.ageS     = try c.decodeIfPresent(Int.self,    forKey: .ageS)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,  forKey: .type)
+        try c.encode(ts,    forKey: .ts)
+        try c.encode(src,   forKey: .src)
+        try c.encode(dst,   forKey: .dst)
+        try c.encode(proto, forKey: .proto)
+        try c.encodeIfPresent(state, forKey: .state)
+        try c.encodeIfPresent(rttMS, forKey: .rttMS)
+        try c.encodeIfPresent(retx,  forKey: .retx)
+        try c.encode(rxBytes, forKey: .rxBytes)
+        try c.encode(txBytes, forKey: .txBytes)
+        try c.encodeIfPresent(ageS, forKey: .ageS)
+    }
+
+    /// Stable tuple-key the aggregator / `AlertHotIndex` use to
+    /// dedupe and look up flow rows.
+    public var flowKey: String {
+        "\(src)→\(dst)/\(proto.rawValue)"
     }
 }

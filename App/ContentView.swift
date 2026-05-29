@@ -107,6 +107,9 @@ struct ContentView: View {
             NavigationStack { TLSLogView() }
                 .tabItem { Label("TLS", systemImage: "lock") }
 
+            NavigationStack { ConnectionsView() }
+                .tabItem { Label("Flows", systemImage: "point.3.connected.trianglepath.dotted") }
+
             NavigationStack { HTTPLogView() }
                 .tabItem { Label("HTTP", systemImage: "globe") }
         }

@@ -38,6 +38,12 @@ public final class SlothStore {
     public private(set) var ntp:  [NTPEntry]  = []
     public private(set) var icmp: [ICMPEntry] = []
 
+    /// Connections ring (M6). Sloth emits one record per active flow
+    /// per emit-tick; the `ConnectionsAggregator` dedups by
+    /// `(src, dst, proto)` and keeps a per-flow RTT sample series
+    /// from the tail of this ring.
+    public private(set) var connections: [ConnectionEntry] = []
+
     /// Alerts ring. Keyed by `entry.key ?? entry.title` so successive
     /// hits for the same alert replace (and refresh) the prior row —
     /// the TUI shows one row per key with a hit count, not one row
@@ -77,9 +83,10 @@ public final class SlothStore {
         case .quic (let e): append(e, into: \.quic, cap: sizes.quic)
         case .http (let e): append(e, into: \.http, cap: sizes.http)
         case .ntp  (let e): append(e, into: \.ntp,  cap: sizes.ntp)
-        case .icmp (let e): append(e, into: \.icmp, cap: sizes.icmp)
-        case .alert(let e): ingestAlert(e)
-        case .unknown:      unknownCount += 1
+        case .icmp        (let e): append(e, into: \.icmp,        cap: sizes.icmp)
+        case .alert       (let e): ingestAlert(e)
+        case .connections (let e): append(e, into: \.connections, cap: sizes.connections)
+        case .unknown:             unknownCount += 1
         }
         recordsReceived += 1
         if connectionState != .connected { connectionState = .connected }
@@ -119,6 +126,7 @@ public final class SlothStore {
         ntp.removeAll()
         icmp.removeAll()
         alerts.removeAll()
+        connections.removeAll()
         unknownCount = 0
         recordsReceived = 0
         connectionState = .idle

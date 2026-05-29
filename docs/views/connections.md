@@ -1,63 +1,79 @@
 # ConnectionsView
 
 Milestone: M6
-Status: spec (blocked on sloth emitting connection records in JSONL)
+Status: implemented (dark until sloth emits `connections` JSONL —
+[sloth#5](https://github.com/SpaceTrucker2196/sloth/issues/5))
 
-## Status note
+## Data source
 
-As of M6 planning, the sloth JSONL schema includes records for
-DNS, TLS, QUIC, HTTP, NTP, ICMP, and alerts — but **not** active
-TCP/UDP connections. The connections panel exists in sloth's TUI
-(view `[2]`), but the per-connection state isn't streamed.
-
-M6 either:
-- (a) waits on a sloth-side change that adds a `conn` record type to
-  the JSONL schema, then implements this view;
-- (b) approximates by aggregating per-flow stats from the TLS/QUIC/
-  DNS streams (lossy but useful).
-
-Decision deferred to milestone start. File the gap in `PROGRESS.md`.
-
-## Data source (preferred, blocks on sloth)
-
-Store ring: `store.connections` (new ring once schema is extended).
+Store ring: `store.connections` (new in M6; `RingSizes.connections`
+default 2048).
+Aggregator: `ConnectionsAggregator.snapshot(from:sparklineCapacity:sort:)`
+— groups by `(src, dst, proto)`, latest record wins as the row's
+authoritative state, last 30 non-nil `rtt_ms` values form the
+sparkline.
+Update cadence: realtime (every `SlothClient` record routes through
+`SlothStore.ingest(_:)` → the ring → the aggregator on next
+`body` evaluation).
 
 ## Layout
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  Connections                       [▤ TCP UDP All]   │
-│  Local              → Remote          Pr ST  PID Pr  │
-│  192.168.1.5:33445  → 8.8.8.8:443     TCP ESTAB 1234 │
-│  192.168.1.5:53210  → 1.1.1.1:53      UDP -     -    │
-│  192.168.1.5:22     ← 192.168.1.99…   TCP ESTAB -    │
-│                                                      │
-│  ┌── RTT (last 30 samples) for selected row ───────┐ │  ← RTTSparkline
-│  │ ▂▃▄▃▂▁▂▃▄▆█▆▄▃▂▁▂▃                              │ │
-│  └─────────────────────────────────────────────────┘ │
+│  Connections                              ⇅ Sort     │
+│  [All] [TCP] [UDP]    🔍 src, dst, state…            │
+│  ↔ 10.0.0.5:33445 → 1.1.1.1:443                      │
+│    ESTABLISHED  ⏱ 12 ms  ↕ 14.5 KiB         ▂▃▄▆█▆▃ │
+│  ↔ 10.0.0.5:53210 → 8.8.8.8:53                       │
+│    UDP          ↕ 1.2 KiB                            │
+│  ↔ 10.0.0.5:22   → 192.168.1.99:60123                │
+│    ESTABLISHED  ⏱ 4 ms   ↕ 0 B               ▁▂▁     │
 └──────────────────────────────────────────────────────┘
 ```
 
+Each row:
+- Protocol glyph (left arrows for TCP, dotted radio for UDP) tinted
+  by protocol family (TCP teal, UDP bright phosphor).
+- `src` → `dst` monospaced; tier hue if the src or dst IP is hot.
+- Sub-row: state badge (TCP only), `⏱ rtt_ms`, `↕ rx+tx bytes`.
+- Trailing inline `RTTSparkline` (64×28pt) when there are samples.
+
+Tap → `ConnectionDetailView` push.
+
 ## Graphs
 
-- **RTTSparkline** — `Chart { LineMark(...) }` for the selected
-  connection, last 30 RTT samples. Tells: congestion / path quality.
+- **RTTSparkline** — `Chart { LineMark(...) }` over the last 30
+  non-nil `rtt_ms` samples for the flow. Hidden axes; heat-graded
+  by value relative to the local peak. Mirrors the M4
+  `BandwidthSparkline` pattern.
 
 ## Interactions
 
-- Filter chips: TCP / UDP / All.
-- Sort: bandwidth / state / RTT / PID.
-- Tap row → reveal RTT sparkline + retx count.
-- Long-press → context menu: copy local, copy remote.
+- Proto chips: All / TCP / UDP.
+- Search field: substring match across `src` / `dst` / `state`.
+- Sort menu (toolbar): Bandwidth (default) / State / RTT / Age.
+- Tap row → push `ConnectionDetailView` with the larger sparkline
+  and full metric grid.
 
 ## Severity / colour
 
-- Remote IPs that match a threat IOC render in CRIT and register
-  alert-hot.
-- Inbound flows to listening ports (`192.168.1.x:22`) get a
-  WARN-orange tint as a "is this expected?" cue.
+- Alert-hot src / dst IPs render in their tier hue via
+  `AlertHotIndex`. Mirrors the DNS / TLS / HTTP rules.
+- No view-local rules beyond the cross-panel index — sloth's alert
+  pipeline is the source of truth.
 
 ## Accessibility
 
-- Row a11y: "Connection from local 192.168.1.5 port 33445 to remote
-  8.8.8.8 port 443. TCP, established. Process chrome."
+- Each row: `"<proto> <src> to <dst> <state>, <n> ms RTT."`
+- Sparkline label: `"RTT trend over the last <n> samples. Latest <x>
+  ms, peak <y> ms."`
+- Reduce-motion disables the sparkline's ease-out animation.
+
+## Forward compatibility
+
+- `state`, `rtt_ms`, `retx`, `age_s` are all optional per the sloth
+  spec. UDP flows omit `state` / `rtt_ms` / `retx`. The view shows
+  what's present; nothing is required beyond `ts`, `src`, `dst`,
+  `proto`, `rx_bytes`, `tx_bytes`.
+- The aggregator dedups by `(src, dst, proto)` only — no flow-id
+  required.

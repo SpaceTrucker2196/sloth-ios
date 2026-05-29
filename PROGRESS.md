@@ -44,15 +44,108 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M8 just landed; the v1.0 line is feature-complete pending M6.)*
+*(nothing — M6 consumer just landed dark; v1.0 line is feature-complete.)*
 
-**M6 blocker**: tracked upstream as
-[sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5). Pick
-M6 back up once sloth emits a `connections` JSONL record.
+**M6 status**: iOS side fully implemented (ring + aggregator + view +
+detail + iPad tile + tests). The view's empty state stays visible
+until sloth emits `{"type":"connections", …}` JSONL lines —
+tracked upstream as
+[sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5). As
+soon as those records arrive on the wire, rows populate
+automatically; no further iOS-side changes needed.
 
 ---
 
 ## Recently landed
+
+### 2026-05-29 — M6: ConnectionsView + RTTSparkline (dark)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/SlothRecord.swift` — adds `case
+  connections(ConnectionEntry)` (with `.unknown` forward-compat
+  preserved). `ConnectionEntry` covers the full sloth#5 spec:
+  required `ts`/`src`/`dst`/`proto`/`rx_bytes`/`tx_bytes`,
+  optional `state`/`rtt_ms`/`retx`/`age_s` (UDP and pre-emit
+  flows omit). `flowKey` returns the natural
+  `"src→dst/proto"` tuple every view dedups on.
+- `Sources/SlothCore/RingSizes.swift` — new `connections` cap
+  (default 2048). Bigger than the log rings because the wire
+  emits one record per active flow per tick; the aggregator
+  reduces the ring to a snapshot.
+- `Sources/SlothCore/SlothStore.swift` — `connections: [ConnectionEntry]`
+  ring + ingest routing + `reset()` clears it.
+- `Sources/SlothCore/ConnectionsAggregator.swift` — pure helper.
+  `snapshot(from:sparklineCapacity:sort:) → [ConnectionFlow]`.
+  Single-pass group by `flowKey`, latest record wins, last 30
+  non-nil `rtt_ms` samples per flow form the sparkline series.
+  Sort enum: `bandwidth` (default) / `state` / `rtt` / `age`,
+  with stable tie-breakers and nil-RTT-last semantics.
+- `Tests/SlothCoreTests/ConnectionEntryTests.swift` — TCP +
+  UDP decode, on-wire shape (omitIfPresent for nils), full
+  round-trip for both protocols.
+- `Tests/SlothCoreTests/ConnectionsAggregatorTests.swift` —
+  empty input, dedup latest-wins, multi-flow separation,
+  sparkline capacity + nil-RTT skip, every sort mode (incl.
+  nil-RTT tail), `apply(sort:)` idempotency.
+- `Tests/SlothCoreTests/SlothStoreTests.swift` — adds
+  connections-ring routing + cap eviction tests.
+- `App/Charts/RTTSparkline.swift` — line chart of the per-flow
+  sample tail, heat-graded by latest value vs. local peak.
+  Sister of M4's `BandwidthSparkline`; reduce-motion respected.
+- `App/Views/ConnectionsView.swift` — proto chip filter
+  (All / TCP / UDP), search across src/dst/state, toolbar sort
+  menu, alert-hot src/dst IPs via `AlertHotIndex`. Empty state
+  explains the sloth#5 dependency.
+- `App/Views/ConnectionDetailView.swift` — push destination.
+  Larger sparkline card, RX/TX/RTT/Retx/Age/Updates metric
+  grid, optional state.
+- `App/ContentView.swift` — adds a `Flows` tab between TLS and
+  HTTP. On iPhone the resulting 6-tab roster overflows into a
+  "More" menu (Flows + HTTP behind it) — standard SwiftUI
+  behaviour for 6+ tabs; matches the M7 spec's importance order
+  with Connections at position 5.
+- `App/Views/DashboardView.swift` — bumps the iPad grid from
+  2×2 to 3×2 so Flows + HTTP get their own tiles alongside the
+  M3–M5 quartet.
+- `docs/views/connections.md` — spec rewritten from the
+  blocked stub to the implemented shape.
+
+**Tests**: 130/130 green (115 pre-existing + 15 new M6 across
+`ConnectionEntryTests`, `ConnectionsAggregatorTests`, the two
+new `SlothStoreTests` cases).
+
+**Verification**:
+- `swift test` — 130/130.
+- `xcodebuild build` on iPhone 17 Pro + iPad Pro 13-inch (M5)
+  simulators: clean.
+- Manual: iPad portrait dashboard renders the new Flows tile in
+  the bottom-left with the M6 empty state and the All/TCP/UDP
+  chips already wired. iPhone TabView shows
+  Alerts/Hosts/DNS/TLS/More with Flows + HTTP behind More
+  (standard iOS overflow for 6+ tabs).
+
+**Why**: The iOS side of M6 wasn't gated on sloth shipping the
+emitter — the ring, aggregator, view, sparkline, and tests can
+all ship hermetically. When sloth#5 closes, the view lights up
+with zero further iOS work. Until then the empty state names
+the dependency so an operator-side question ("why no flows?")
+links back to the producer.
+
+**Follow-ups**:
+- Once sloth emits `{"type":"connections", …}` records the M6
+  view populates automatically. End-to-end verification (RTT
+  sparklines from a live tailnet) becomes possible at that
+  point.
+- The iPhone TabView has 6 tabs; SwiftUI moves the last two
+  behind the "More" affordance. Acceptable; the M7 importance
+  order (Alerts → Top hosts → DNS → TLS → Connections) is
+  preserved in the underlying order. If the operator survey
+  ever flags HTTP as needing primary access on iPhone, drop a
+  tab or move to a custom tab bar.
+- All v1.0 milestones (M1–M8) now have their consumer side
+  shipped. Adjacent v1.x vectors per the milestones doc:
+  macOS Catalyst pass, per-host pin / favourite, snapshot
+  export, Stage Manager polish.
 
 ### 2026-05-27 — M8: Polish, profiles, reconnect
 **Commits**: *(this entry lands with the commit)*

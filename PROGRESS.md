@@ -44,19 +44,81 @@ the commit hashes.
 
 ## In progress
 
-*(nothing — M6 consumer just landed dark; v1.0 line is feature-complete.)*
+*(nothing — local-network discovery (Bonjour) just landed dark; v1.0 + first v1.x polish are out.)*
 
-**M6 status**: iOS side fully implemented (ring + aggregator + view +
-detail + iPad tile + tests). The view's empty state stays visible
-until sloth emits `{"type":"connections", …}` JSONL lines —
-tracked upstream as
-[sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5). As
-soon as those records arrive on the wire, rows populate
-automatically; no further iOS-side changes needed.
+**Dark-on-producer features** awaiting sloth-side work:
+- **Connections view (M6)** — populates when sloth emits
+  `{"type":"connections", …}` JSONL lines
+  ([sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5)).
+- **Local-network discovery** — populates when sloth publishes
+  `_sloth._tcp.` via Bonjour (no upstream issue yet; see
+  [`docs/wiki/discovery.md`](docs/wiki/discovery.md) for the
+  expected contract).
 
 ---
 
 ## Recently landed
+
+### 2026-05-29 — Local-network discovery (Bonjour)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/SlothDiscovery.swift` —
+  `@MainActor @Observable` browser around `NetServiceBrowser` for
+  `_sloth._tcp.`. Resolves to `hostname:port`, exposes
+  `[DiscoveredService]` with `start()` / `stop()`. NSObject
+  delegate isolation is handled via `@MainActor BrowserDelegate`
+  + `@preconcurrency` conformance to the Foundation protocols
+  (NetService(Browser)Delegate predate Swift Concurrency).
+- `App/Views/DiscoveryView.swift` — sheet. Browse runs only
+  while the sheet is on-screen. Tap a row → adds a
+  `NamedProfile` to `ProfileStore` (or reactivates an existing
+  one with the same URI) and dismisses; the coordinator picks
+  up the new active profile via the `activeID` `onChange` hook
+  already in `ContentView`.
+- `App/ContentView.swift` — adds a `wifi.router` icon button in
+  the connection bar plus a "Discover…" entry in the ellipsis
+  menu.
+- `project.yml` — adds `NSBonjourServices` (`_sloth._tcp`) and
+  `NSLocalNetworkUsageDescription` to the generated Info.plist
+  (iOS 14+ requirement for any Bonjour browse).
+- `Tests/SlothCoreTests/SlothDiscoveryTests.swift` — 6 new
+  hermetic tests covering `DiscoveredService` → `ConnectionProfile`
+  derivation (trailing-dot trim, dotless passthrough, TXT
+  preservation, equality), `SlothDiscovery` initial state, and
+  no-op stop-from-idle. The browser-against-a-real-bonjour-stack
+  path is integration territory and isn't unit-tested.
+- `docs/wiki/discovery.md` — new wiki page documenting both
+  sides of the contract (service type, TXT, Info.plist keys,
+  producer-side implementation hints, UX notes).
+
+**Tests**: 136/136 green (130 pre-existing + 6 new).
+
+**Verification**:
+- `swift test` — 136/136.
+- `xcodebuild build` on iPhone 17 Pro simulator — clean.
+- Manual: connection bar shows the new `wifi.router` button and
+  the ellipsis menu carries Discover…. The sheet shows the
+  "Looking for sloth instances…" placeholder until the producer
+  side ships an mDNS responder.
+
+**Why**: Typing `tcp:host.tailnet:7777` is the wrong first
+contact for a new operator. With Bonjour the natural UX is
+"sloth is on the network — pick it from the list". Dark-on-
+producer is the same pattern as M6: build the consumer side
+now so it lights up the second the producer ships.
+
+**Follow-ups**:
+- File an issue on sloth: `[mdns] publish _sloth._tcp via Avahi
+  when --data-socket is bound`. Linux Avahi is the standard
+  path; macOS uses dns-sd. The TXT record can stay empty for
+  v1; sloth-ios shows the rows fine without it.
+- If/when sloth grows a `discovery` flag (publish only when an
+  operator opts in), document the flag in
+  [`docs/wiki/discovery.md`](docs/wiki/discovery.md).
+- Out of scope here: a Tailscale-peer browse mode for the
+  cross-LAN case. Bonjour solves the home-LAN case cleanly;
+  tailnet remote access already works via the saved-profile
+  flow.
 
 ### 2026-05-29 — M6: ConnectionsView + RTTSparkline (dark)
 **Commits**: *(this entry lands with the commit)*

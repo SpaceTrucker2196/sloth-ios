@@ -48,6 +48,12 @@ targets:
           - UIInterfaceOrientationLandscapeRight
           - UIInterfaceOrientationPortraitUpsideDown
         ITSAppUsesNonExemptEncryption: false
+        # Bonjour service types this app browses (iOS 14+ requirement).
+        NSBonjourServices:
+          - _sloth._tcp
+        # Shown in the iOS "Local Network" permission prompt the first
+        # time the discovery sheet runs.
+        NSLocalNetworkUsageDescription: "Find sloth instances on your local network."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.river.sloth.ios

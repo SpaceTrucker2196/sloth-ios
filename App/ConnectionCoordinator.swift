@@ -38,7 +38,7 @@ final class ConnectionCoordinator {
         self.client       = client
         self.draftURI     = profileStore.activeProfile?.profile.uri
                           ?? ConnectionProfile.load()?.uri
-                          ?? "tcp:host.tailnet:7777"
+                          ?? "tcp:host.tailnet:8765"
     }
 
     func loadActiveIntoDraft() {

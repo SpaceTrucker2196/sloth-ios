@@ -50,8 +50,15 @@ public struct NetworkTransport: SlothTransport {
                 return
             }
             let host = NWEndpoint.Host(profile.host)
+            // includePeerToPeer = true ensures iOS surfaces the
+            // "Local Network" permission prompt for LAN / .local
+            // targets. Without it a first-launch connect to a private
+            // IPv4 (or *.local) silently fails until the operator
+            // opens Discovery (which also triggers the prompt).
+            let params = NWParameters.tcp
+            params.includePeerToPeer = true
             let box  = NWConnectionBox(
-                NWConnection(host: host, port: port, using: .tcp)
+                NWConnection(host: host, port: port, using: params)
             )
             let queue = DispatchQueue(label: "io.river.sloth.transport")
 

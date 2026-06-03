@@ -74,8 +74,8 @@ struct DiscoveryView: View {
             Text("Looking for sloth instances…")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Text("Sloth instances advertise themselves on the local network via Bonjour (\(SlothDiscovery.serviceType)). " +
-                 "If nothing appears, the producer side may not be publishing yet — see Settings → About.")
+            Text("Sloth instances need to advertise \(SlothDiscovery.serviceType) on the local network for this list to populate. " +
+                 "Bonjour publishing isn't yet part of the sloth producer — meanwhile, dismiss this sheet and type the address into the URI field, e.g. `tcp:slothbox.local:8765` or `tcp:100.x.y.z:8765` for a Tailscale tailnet.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)

@@ -40,8 +40,16 @@ targets:
         CFBundleDisplayName: sloth
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # An empty UILaunchScreen dict opts the app into modern launch
+        # behaviour. Without it iOS treats the app as legacy and runs
+        # it in iPhone-4 (320×480) compatibility mode — the "small
+        # square in the middle of the screen" symptom.
+        UILaunchScreen:
+          UIColorName: ""
         UISupportedInterfaceOrientations~iphone:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -52,7 +60,8 @@ targets:
         NSBonjourServices:
           - _sloth._tcp
         # Shown in the iOS "Local Network" permission prompt the first
-        # time the discovery sheet runs.
+        # time discovery runs or the first time NWConnection tries a
+        # peer-to-peer TCP connect to a LAN address.
         NSLocalNetworkUsageDescription: "Find sloth instances on your local network."
     settings:
       base:

@@ -140,6 +140,71 @@ final class SlothRecordTests: XCTestCase {
         XCTAssertEqual(json["ts"]   as? Int,    1716700005)
     }
 
+    // MARK: - Snapshot records (M9)
+
+    func testDecodeIFace() throws {
+        let json = #"""
+        {"type":"iface","ts":1716700100,"name":"en0","rx_bytes":1234,"tx_bytes":5678,"rx_packets":10,"tx_packets":12,"rx_errors":0,"rx_drops":0,"tx_errors":0,"tx_drops":0,"rx_rate":1024.50,"tx_rate":512.25,"mtu":1500,"speed_mbps":1000}
+        """#
+        guard case .iface(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.name, "en0")
+        XCTAssertEqual(e.rxRate, 1024.50)
+        XCTAssertEqual(e.txRate, 512.25)
+        XCTAssertEqual(e.mtu, 1500)
+        XCTAssertEqual(e.speedMbps, 1000)
+    }
+
+    func testDecodeDevice() throws {
+        let json = #"""
+        {"type":"device","ts":1716700101,"mac":"aa:bb:cc:dd:ee:ff","ip":"192.168.1.5","hostname":"laptop.local","vendor":"Apple","is_ap":0,"signal_dbm":-55,"probe_count":3,"sources":7,"last_seen":1716700100}
+        """#
+        guard case .device(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.mac, "aa:bb:cc:dd:ee:ff")
+        XCTAssertEqual(e.hostname, "laptop.local")
+        XCTAssertEqual(e.signalDBM, -55)
+        XCTAssertEqual(e.isAP, 0)
+    }
+
+    func testDecodeBeacon() throws {
+        let json = #"""
+        {"type":"beacon","ts":1716700102,"bssid":"11:22:33:44:55:66","ssid":"Home-WiFi","signal_dbm":-42,"channel":36,"enc":"WPA3","vendor":"Ubiquiti","phy":"ax","last_seen":1716700102,"frame_count":99,"rssi_min_60s":-50,"rssi_max_60s":-40}
+        """#
+        guard case .beacon(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.ssid, "Home-WiFi")
+        XCTAssertEqual(e.channel, 36)
+        XCTAssertEqual(e.enc, "WPA3")
+        XCTAssertEqual(e.rssiSwing60s, 10)
+    }
+
+    func testDecodeTwinEpisode() throws {
+        let json = #"""
+        {"type":"twin_episode","ts":1716700103,"ssid":"Cafe-Net","real_bssid":"aa:bb:cc:01:02:03","twin_bssid":"11:22:33:44:55:66","enc":"WPA2","real_rssi":-70,"twin_rssi":-45,"rssi_swing_dbm":25,"attack_in_progress":1,"attacker_oui":1,"hash_mismatch":1}
+        """#
+        guard case .twinEpisode(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.ssid, "Cafe-Net")
+        XCTAssertEqual(e.twinBSSID, "11:22:33:44:55:66")
+        XCTAssertEqual(e.rssiSwingDBM, 25)
+        XCTAssertEqual(e.attackInProgress, 1)
+        XCTAssertEqual(e.severity, .crit, "attack_in_progress=1 must escalate to CRIT")
+    }
+
+    func testTwinEpisodeSeverityLadder() {
+        func make(attack: Int, oui: Int, hash: Int, swing: Int) -> TwinEpisodeEntry {
+            let json = """
+            {"type":"twin_episode","ts":0,"ssid":"s","real_bssid":"a","twin_bssid":"b",\
+            "real_rssi":0,"twin_rssi":0,"rssi_swing_dbm":\(swing),\
+            "attack_in_progress":\(attack),"attacker_oui":\(oui),"hash_mismatch":\(hash)}
+            """
+            // swiftlint:disable:next force_try
+            return try! JSONDecoder().decode(TwinEpisodeEntry.self, from: Data(json.utf8))
+        }
+        XCTAssertEqual(make(attack: 1, oui: 0, hash: 0, swing: 0).severity,  .crit)
+        XCTAssertEqual(make(attack: 0, oui: 1, hash: 0, swing: 0).severity,  .warn)
+        XCTAssertEqual(make(attack: 0, oui: 0, hash: 1, swing: 0).severity,  .warn)
+        XCTAssertEqual(make(attack: 0, oui: 0, hash: 0, swing: 20).severity, .warn)
+        XCTAssertEqual(make(attack: 0, oui: 0, hash: 0, swing: 0).severity,  .low)
+    }
+
     // MARK: - Helpers
 
     private func decode(_ json: String) throws -> SlothRecord {

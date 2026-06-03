@@ -44,6 +44,23 @@ public final class SlothStore {
     /// from the tail of this ring.
     public private(set) var connections: [ConnectionEntry] = []
 
+    // Snapshot tables (M9). Sloth re-emits each entry every poll tick;
+    // the iOS store replaces in place keyed by the natural identity
+    // listed in `docs/wiki/jsonl-schema.md` § state-snapshot records.
+    // No ring eviction: when an entry stops being emitted by sloth,
+    // it stays in our table — staleness should be filtered by view
+    // code via `lastSeen` if it matters.
+    public private(set) var ifaces: [String: IFaceEntry]              = [:]
+    public private(set) var devices: [String: DeviceEntry]            = [:]
+    public private(set) var beacons: [String: BeaconEntry]            = [:]
+    public private(set) var twinEpisodes: [String: TwinEpisodeEntry]  = [:]
+
+    /// Per-iface rate sample series — appended on each `iface` snapshot
+    /// so InterfacesView can draw a 60-sample sparkline of rx + tx.
+    /// Index 0 is oldest. Cap is `RingSizes.ifaceSamples`.
+    public private(set) var ifaceRxSamples: [String: [Double]] = [:]
+    public private(set) var ifaceTxSamples: [String: [Double]] = [:]
+
     /// Alerts ring. Keyed by `entry.key ?? entry.title` so successive
     /// hits for the same alert replace (and refresh) the prior row —
     /// the TUI shows one row per key with a hit count, not one row
@@ -86,6 +103,10 @@ public final class SlothStore {
         case .icmp        (let e): append(e, into: \.icmp,        cap: sizes.icmp)
         case .alert       (let e): ingestAlert(e)
         case .connections (let e): append(e, into: \.connections, cap: sizes.connections)
+        case .iface       (let e): ingestIFace(e)
+        case .device      (let e): devices[e.mac] = e
+        case .beacon      (let e): beacons[e.bssid] = e
+        case .twinEpisode (let e): twinEpisodes[e.id] = e
         case .unknown:             unknownCount += 1
         }
         recordsReceived += 1
@@ -127,6 +148,12 @@ public final class SlothStore {
         icmp.removeAll()
         alerts.removeAll()
         connections.removeAll()
+        ifaces.removeAll()
+        devices.removeAll()
+        beacons.removeAll()
+        twinEpisodes.removeAll()
+        ifaceRxSamples.removeAll()
+        ifaceTxSamples.removeAll()
         unknownCount = 0
         recordsReceived = 0
         connectionState = .idle
@@ -142,6 +169,27 @@ public final class SlothStore {
         if overflow > 0 {
             self[keyPath: keyPath].removeFirst(overflow)
         }
+    }
+
+    private func ingestIFace(_ entry: IFaceEntry) {
+        ifaces[entry.name] = entry
+        // Sample series — appendKeepLast keeps the tail bounded at
+        // `sizes.ifaceSamples`. We do this even when the rate is zero
+        // so the sparkline shows real gaps.
+        appendSample(entry.rxRate, name: entry.name, into: \.ifaceRxSamples)
+        appendSample(entry.txRate, name: entry.name, into: \.ifaceTxSamples)
+    }
+
+    private func appendSample(
+        _ value: Double,
+        name: String,
+        into keyPath: ReferenceWritableKeyPath<SlothStore, [String: [Double]]>
+    ) {
+        var series = self[keyPath: keyPath][name] ?? []
+        series.append(value)
+        let overflow = series.count - sizes.ifaceSamples
+        if overflow > 0 { series.removeFirst(overflow) }
+        self[keyPath: keyPath][name] = series
     }
 
     private func ingestAlert(_ entry: AlertEntry) {

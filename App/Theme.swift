@@ -7,7 +7,61 @@
 // the headless package stays SwiftUI-free.
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 import SlothCore
+
+// MARK: - Phosphor font
+
+extension Font {
+
+    /// Body font for the whole app. Prefers FiraCode (if the operator
+    /// has dropped a TTF into `App/Resources/Fonts/` and declared it
+    /// in `UIAppFonts`); falls back to the system monospaced design
+    /// (SF Mono on iOS), which has the same TUI vibe. Same fallback
+    /// chain everywhere: views never branch on font availability.
+    ///
+    /// `relativeTo:` makes the metric Dynamic-Type aware — text scales
+    /// with the operator's preferred body size.
+    static func phosphor(
+        _ style: Font.TextStyle = .body,
+        weight: Font.Weight = .regular
+    ) -> Font {
+        if Self.firaCodeIsRegistered {
+            return .custom(firaCodeName, size: pointSize(for: style),
+                           relativeTo: style).weight(weight)
+        }
+        return .system(style, design: .monospaced).weight(weight)
+    }
+
+    private static let firaCodeName = "FiraCode-Regular"
+
+    private static let firaCodeIsRegistered: Bool = {
+        #if canImport(UIKit)
+        UIFont(name: firaCodeName, size: 12) != nil
+        #else
+        false
+        #endif
+    }()
+
+    private static func pointSize(for style: Font.TextStyle) -> CGFloat {
+        switch style {
+        case .largeTitle: return 34
+        case .title:      return 28
+        case .title2:     return 22
+        case .title3:     return 20
+        case .headline:   return 17
+        case .body:       return 17
+        case .callout:    return 16
+        case .subheadline:return 15
+        case .footnote:   return 13
+        case .caption:    return 12
+        case .caption2:   return 11
+        default:          return 17
+        }
+    }
+}
 
 extension Color {
 

@@ -108,8 +108,21 @@ struct ContentView: View {
                 .tabItem { Label("Alerts", systemImage: "exclamationmark.triangle") }
                 .badge(severityCount(.crit))
 
-            NavigationStack { TopHostsView() }
-                .tabItem { Label("Hosts", systemImage: "globe.americas") }
+            NavigationStack { WiFiAPsView() }
+                .tabItem { Label("WiFi", systemImage: "wifi") }
+
+            NavigationStack { DevicesView() }
+                .tabItem { Label("Devices", systemImage: "rectangle.connected.to.line.below") }
+
+            // Hosts + Flows are reachable from HomeView's "All →"
+            // section headers; keeping them off the tab bar avoids the
+            // M7 overlap and frees a tab slot.
+            NavigationStack { TwinsView() }
+                .tabItem { Label("Twins", systemImage: "shield.checkered") }
+                .badge(twinCount)
+
+            NavigationStack { InterfacesView() }
+                .tabItem { Label("Iface", systemImage: "network") }
 
             NavigationStack { DNSLogView() }
                 .tabItem { Label("DNS", systemImage: "questionmark.bubble") }
@@ -117,11 +130,17 @@ struct ContentView: View {
             NavigationStack { TLSLogView() }
                 .tabItem { Label("TLS", systemImage: "lock") }
 
-            NavigationStack { ConnectionsView() }
-                .tabItem { Label("Flows", systemImage: "point.3.connected.trianglepath.dotted") }
-
             NavigationStack { HTTPLogView() }
                 .tabItem { Label("HTTP", systemImage: "globe") }
+        }
+    }
+
+    /// Count of twin episodes whose severity is WARN or CRIT — what
+    /// the operator wants to be paged about. LOW is passive detection
+    /// only and would be noisy as a tab badge.
+    private var twinCount: Int {
+        store.twinEpisodes.values.reduce(0) { acc, e in
+            acc + (e.severity == .low ? 0 : 1)
         }
     }
 

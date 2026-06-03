@@ -24,6 +24,10 @@ public struct RingSizes: Sendable, Equatable {
     /// flow per emit-tick ≈ the visible flow-history window the
     /// `ConnectionsAggregator` can build a sparkline from.
     public let connections: Int
+    /// Per-interface rate-sample tail used by InterfacesView's
+    /// rx/tx sparkline. Sloth emits one `iface` record per interface
+    /// per ≈ 1 s tick, so 60 samples ≈ 60 s of history.
+    public let ifaceSamples: Int
 
     public init(
         dns:    Int = 1024,
@@ -33,7 +37,8 @@ public struct RingSizes: Sendable, Equatable {
         ntp:    Int = 128,
         icmp:   Int = 256,
         alerts: Int = 128,
-        connections: Int = 2048
+        connections:  Int = 2048,
+        ifaceSamples: Int = 60
     ) {
         self.dns    = dns
         self.tls    = tls
@@ -42,7 +47,8 @@ public struct RingSizes: Sendable, Equatable {
         self.ntp    = ntp
         self.icmp   = icmp
         self.alerts = alerts
-        self.connections = connections
+        self.connections  = connections
+        self.ifaceSamples = ifaceSamples
     }
 
     /// The defaults sloth-ios ships with. Mirrors sloth's TUI caps

@@ -25,6 +25,10 @@ public enum SlothRecord: Sendable, Equatable {
     case icmp(ICMPEntry)
     case alert(AlertEntry)
     case connections(ConnectionEntry)
+    case iface(IFaceEntry)
+    case device(DeviceEntry)
+    case beacon(BeaconEntry)
+    case twinEpisode(TwinEpisodeEntry)
     case unknown(type: String, ts: Int)
 
     public var ts: Int {
@@ -37,6 +41,10 @@ public enum SlothRecord: Sendable, Equatable {
         case .icmp       (let e): return e.ts
         case .alert      (let e): return e.ts
         case .connections(let e): return e.ts
+        case .iface      (let e): return e.ts
+        case .device     (let e): return e.ts
+        case .beacon     (let e): return e.ts
+        case .twinEpisode(let e): return e.ts
         case .unknown(_, let ts): return ts
         }
     }
@@ -51,6 +59,10 @@ public enum SlothRecord: Sendable, Equatable {
         case .icmp:        return "icmp"
         case .alert:       return "alert"
         case .connections: return "connections"
+        case .iface:       return "iface"
+        case .device:      return "device"
+        case .beacon:      return "beacon"
+        case .twinEpisode: return "twin_episode"
         case .unknown(let t, _): return t
         }
     }
@@ -77,6 +89,10 @@ extension SlothRecord: Decodable {
         case "icmp":  self = .icmp (try ICMPEntry (from: decoder))
         case "alert":       self = .alert      (try AlertEntry      (from: decoder))
         case "connections": self = .connections(try ConnectionEntry (from: decoder))
+        case "iface":       self = .iface      (try IFaceEntry      (from: decoder))
+        case "device":      self = .device     (try DeviceEntry     (from: decoder))
+        case "beacon":      self = .beacon     (try BeaconEntry     (from: decoder))
+        case "twin_episode":self = .twinEpisode(try TwinEpisodeEntry(from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             self = .unknown(type: tag, ts: ts)
@@ -95,6 +111,10 @@ extension SlothRecord: Encodable {
         case .icmp (let e): try e.encode(to: encoder)
         case .alert      (let e): try e.encode(to: encoder)
         case .connections(let e): try e.encode(to: encoder)
+        case .iface      (let e): try e.encode(to: encoder)
+        case .device     (let e): try e.encode(to: encoder)
+        case .beacon     (let e): try e.encode(to: encoder)
+        case .twinEpisode(let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
@@ -502,5 +522,295 @@ public struct ConnectionEntry: Sendable, Codable, Equatable {
     /// dedupe and look up flow rows.
     public var flowKey: String {
         "\(src)→\(dst)/\(proto.rawValue)"
+    }
+}
+
+// MARK: - Snapshot records (M9)
+
+// Sloth's `--data-socket` re-emits every view-backing table once per
+// poll tick (≈ 1 Hz) — one record per active entry per tick. These
+// types are snapshot records: consumers key them by the natural
+// identity field below and replace prior state on each tick. When an
+// entry ages out of sloth's source table its records simply stop
+// arriving (no explicit "closed" sentinel). See sloth's
+// `docs/wiki/jsonl-schema.md` § "State snapshot record types".
+
+/// `iface` — one entry per network interface visible to sloth. Holds
+/// totals plus current rx/tx rates (bytes/sec, float).
+public struct IFaceEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "iface" }
+    public let ts: Int
+    public let name: String
+    public let rxBytes: Int
+    public let txBytes: Int
+    public let rxPackets: Int
+    public let txPackets: Int
+    public let rxErrors: Int
+    public let rxDrops: Int
+    public let txErrors: Int
+    public let txDrops: Int
+    public let rxRate: Double
+    public let txRate: Double
+    public let mtu: Int?
+    public let speedMbps: Int?
+
+    public var id: String { name }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, name, mtu
+        case rxBytes   = "rx_bytes"
+        case txBytes   = "tx_bytes"
+        case rxPackets = "rx_packets"
+        case txPackets = "tx_packets"
+        case rxErrors  = "rx_errors"
+        case rxDrops   = "rx_drops"
+        case txErrors  = "tx_errors"
+        case txDrops   = "tx_drops"
+        case rxRate    = "rx_rate"
+        case txRate    = "tx_rate"
+        case speedMbps = "speed_mbps"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts        = try c.decode(Int.self,    forKey: .ts)
+        self.name      = try c.decode(String.self, forKey: .name)
+        self.rxBytes   = try c.decodeIfPresent(Int.self,    forKey: .rxBytes)   ?? 0
+        self.txBytes   = try c.decodeIfPresent(Int.self,    forKey: .txBytes)   ?? 0
+        self.rxPackets = try c.decodeIfPresent(Int.self,    forKey: .rxPackets) ?? 0
+        self.txPackets = try c.decodeIfPresent(Int.self,    forKey: .txPackets) ?? 0
+        self.rxErrors  = try c.decodeIfPresent(Int.self,    forKey: .rxErrors)  ?? 0
+        self.rxDrops   = try c.decodeIfPresent(Int.self,    forKey: .rxDrops)   ?? 0
+        self.txErrors  = try c.decodeIfPresent(Int.self,    forKey: .txErrors)  ?? 0
+        self.txDrops   = try c.decodeIfPresent(Int.self,    forKey: .txDrops)   ?? 0
+        self.rxRate    = try c.decodeIfPresent(Double.self, forKey: .rxRate)    ?? 0
+        self.txRate    = try c.decodeIfPresent(Double.self, forKey: .txRate)    ?? 0
+        self.mtu       = try c.decodeIfPresent(Int.self,    forKey: .mtu)
+        self.speedMbps = try c.decodeIfPresent(Int.self,    forKey: .speedMbps)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,      forKey: .type)
+        try c.encode(ts,        forKey: .ts)
+        try c.encode(name,      forKey: .name)
+        try c.encode(rxBytes,   forKey: .rxBytes)
+        try c.encode(txBytes,   forKey: .txBytes)
+        try c.encode(rxPackets, forKey: .rxPackets)
+        try c.encode(txPackets, forKey: .txPackets)
+        try c.encode(rxErrors,  forKey: .rxErrors)
+        try c.encode(rxDrops,   forKey: .rxDrops)
+        try c.encode(txErrors,  forKey: .txErrors)
+        try c.encode(txDrops,   forKey: .txDrops)
+        try c.encode(rxRate,    forKey: .rxRate)
+        try c.encode(txRate,    forKey: .txRate)
+        try c.encodeIfPresent(mtu,       forKey: .mtu)
+        try c.encodeIfPresent(speedMbps, forKey: .speedMbps)
+    }
+}
+
+/// `device` — one entry per host sloth has seen on the LAN (ARP,
+/// DHCP, mDNS, WiFi association — `sources` is a bitmask of
+/// `DEV_SRC_*` from the producer side).
+public struct DeviceEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "device" }
+    public let ts: Int
+    public let mac: String
+    public let ip: String?
+    public let hostname: String?
+    public let vendor: String?
+    public let lastSSID: String?
+    public let isAP: Int
+    public let signalDBM: Int?
+    public let probeCount: Int
+    public let sources: Int
+    public let lastSeen: Int
+
+    public var id: String { mac }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, mac, ip, hostname, vendor, sources
+        case lastSSID   = "last_ssid"
+        case isAP       = "is_ap"
+        case signalDBM  = "signal_dbm"
+        case probeCount = "probe_count"
+        case lastSeen   = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self,    forKey: .ts)
+        self.mac        = try c.decode(String.self, forKey: .mac)
+        self.ip         = try c.decodeIfPresent(String.self, forKey: .ip)
+        self.hostname   = try c.decodeIfPresent(String.self, forKey: .hostname)
+        self.vendor     = try c.decodeIfPresent(String.self, forKey: .vendor)
+        self.lastSSID   = try c.decodeIfPresent(String.self, forKey: .lastSSID)
+        self.isAP       = try c.decodeIfPresent(Int.self,    forKey: .isAP)       ?? 0
+        self.signalDBM  = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
+        self.probeCount = try c.decodeIfPresent(Int.self,    forKey: .probeCount) ?? 0
+        self.sources    = try c.decodeIfPresent(Int.self,    forKey: .sources)    ?? 0
+        self.lastSeen   = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)   ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(mac,  forKey: .mac)
+        try c.encodeIfPresent(ip,        forKey: .ip)
+        try c.encodeIfPresent(hostname,  forKey: .hostname)
+        try c.encodeIfPresent(vendor,    forKey: .vendor)
+        try c.encodeIfPresent(lastSSID,  forKey: .lastSSID)
+        try c.encode(isAP,       forKey: .isAP)
+        try c.encodeIfPresent(signalDBM, forKey: .signalDBM)
+        try c.encode(probeCount, forKey: .probeCount)
+        try c.encode(sources,    forKey: .sources)
+        try c.encode(lastSeen,   forKey: .lastSeen)
+    }
+}
+
+/// `beacon` — one entry per WiFi AP observed in 802.11 beacon frames.
+/// Many fields exist upstream (`docs/wiki/jsonl-schema.md`); the iOS
+/// view only surfaces a useful subset for now.
+public struct BeaconEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "beacon" }
+    public let ts: Int
+    public let bssid: String
+    public let ssid: String?
+    public let signalDBM: Int?
+    public let channel: Int?
+    public let enc: String?
+    public let vendor: String?
+    public let phy: String?
+    public let lastSeen: Int
+    public let frameCount: Int
+    public let rssiMin60s: Int?
+    public let rssiMax60s: Int?
+
+    public var id: String { bssid }
+
+    /// Convenience: the dB swing in the last 60 s — the same number
+    /// `twin_episode.rssi_swing_dbm` watches for an evil twin.
+    public var rssiSwing60s: Int? {
+        guard let mn = rssiMin60s, let mx = rssiMax60s, mn != 0, mx != 0 else { return nil }
+        return mx - mn
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, bssid, ssid, channel, enc, vendor, phy
+        case signalDBM  = "signal_dbm"
+        case lastSeen   = "last_seen"
+        case frameCount = "frame_count"
+        case rssiMin60s = "rssi_min_60s"
+        case rssiMax60s = "rssi_max_60s"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self,    forKey: .ts)
+        self.bssid      = try c.decode(String.self, forKey: .bssid)
+        self.ssid       = try c.decodeIfPresent(String.self, forKey: .ssid)
+        self.signalDBM  = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
+        self.channel    = try c.decodeIfPresent(Int.self,    forKey: .channel)
+        self.enc        = try c.decodeIfPresent(String.self, forKey: .enc)
+        self.vendor     = try c.decodeIfPresent(String.self, forKey: .vendor)
+        self.phy        = try c.decodeIfPresent(String.self, forKey: .phy)
+        self.lastSeen   = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)   ?? 0
+        self.frameCount = try c.decodeIfPresent(Int.self,    forKey: .frameCount) ?? 0
+        self.rssiMin60s = try c.decodeIfPresent(Int.self,    forKey: .rssiMin60s)
+        self.rssiMax60s = try c.decodeIfPresent(Int.self,    forKey: .rssiMax60s)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,  forKey: .type)
+        try c.encode(ts,    forKey: .ts)
+        try c.encode(bssid, forKey: .bssid)
+        try c.encodeIfPresent(ssid,      forKey: .ssid)
+        try c.encodeIfPresent(signalDBM, forKey: .signalDBM)
+        try c.encodeIfPresent(channel,   forKey: .channel)
+        try c.encodeIfPresent(enc,       forKey: .enc)
+        try c.encodeIfPresent(vendor,    forKey: .vendor)
+        try c.encodeIfPresent(phy,       forKey: .phy)
+        try c.encode(lastSeen,   forKey: .lastSeen)
+        try c.encode(frameCount, forKey: .frameCount)
+        try c.encodeIfPresent(rssiMin60s, forKey: .rssiMin60s)
+        try c.encodeIfPresent(rssiMax60s, forKey: .rssiMax60s)
+    }
+}
+
+/// `twin_episode` — sloth's evil-twin detector emits one record per
+/// suspected rogue AP pair per poll. The pair is identified by
+/// `(ssid, real_bssid, twin_bssid)`. `attack_in_progress=1` means the
+/// chain rule tainted `twin_bssid` (a DEAUTH flood was observed
+/// within 5 s of the twin appearing) — that is the highest-severity
+/// signal in the record.
+public struct TwinEpisodeEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "twin_episode" }
+    public let ts: Int
+    public let ssid: String
+    public let realBSSID: String
+    public let twinBSSID: String
+    public let enc: String?
+    public let realRSSI: Int
+    public let twinRSSI: Int
+    public let rssiSwingDBM: Int
+    public let attackInProgress: Int
+    public let attackerOUI: Int
+    public let hashMismatch: Int
+
+    public var id: String { "\(ssid)|\(realBSSID)|\(twinBSSID)" }
+
+    /// Mapping to the iOS three-tier alert palette:
+    ///   * attack_in_progress=1            → crit
+    ///   * any of attacker_oui / hash_mismatch / swing≥15 dB → warn
+    ///   * otherwise (passive detection only)               → low
+    public var severity: AlertSeverity {
+        if attackInProgress != 0 { return .crit }
+        if attackerOUI != 0 || hashMismatch != 0 || rssiSwingDBM >= 15 { return .warn }
+        return .low
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, ssid, enc
+        case realBSSID        = "real_bssid"
+        case twinBSSID        = "twin_bssid"
+        case realRSSI         = "real_rssi"
+        case twinRSSI         = "twin_rssi"
+        case rssiSwingDBM     = "rssi_swing_dbm"
+        case attackInProgress = "attack_in_progress"
+        case attackerOUI      = "attacker_oui"
+        case hashMismatch     = "hash_mismatch"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts               = try c.decode(Int.self,    forKey: .ts)
+        self.ssid             = try c.decode(String.self, forKey: .ssid)
+        self.realBSSID        = try c.decode(String.self, forKey: .realBSSID)
+        self.twinBSSID        = try c.decode(String.self, forKey: .twinBSSID)
+        self.enc              = try c.decodeIfPresent(String.self, forKey: .enc)
+        self.realRSSI         = try c.decodeIfPresent(Int.self,    forKey: .realRSSI)     ?? 0
+        self.twinRSSI         = try c.decodeIfPresent(Int.self,    forKey: .twinRSSI)     ?? 0
+        self.rssiSwingDBM     = try c.decodeIfPresent(Int.self,    forKey: .rssiSwingDBM) ?? 0
+        self.attackInProgress = try c.decodeIfPresent(Int.self,    forKey: .attackInProgress) ?? 0
+        self.attackerOUI      = try c.decodeIfPresent(Int.self,    forKey: .attackerOUI)  ?? 0
+        self.hashMismatch     = try c.decodeIfPresent(Int.self,    forKey: .hashMismatch) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(ssid, forKey: .ssid)
+        try c.encode(realBSSID, forKey: .realBSSID)
+        try c.encode(twinBSSID, forKey: .twinBSSID)
+        try c.encodeIfPresent(enc, forKey: .enc)
+        try c.encode(realRSSI,         forKey: .realRSSI)
+        try c.encode(twinRSSI,         forKey: .twinRSSI)
+        try c.encode(rssiSwingDBM,     forKey: .rssiSwingDBM)
+        try c.encode(attackInProgress, forKey: .attackInProgress)
+        try c.encode(attackerOUI,      forKey: .attackerOUI)
+        try c.encode(hashMismatch,     forKey: .hashMismatch)
     }
 }

@@ -53,6 +53,49 @@ final class SlothStoreTests: XCTestCase {
         XCTAssertEqual(store.dns.count + store.tls.count, 0)
     }
 
+    // MARK: - Snapshot tables (M9)
+
+    func testIFaceReplacesOnSameNameAndKeepsSampleTail() throws {
+        let store = SlothStore(sizes: RingSizes(ifaceSamples: 4))
+        for i in 1...6 {
+            let json = """
+            {"type":"iface","ts":\(i),"name":"en0","rx_rate":\(Double(i)),"tx_rate":\(Double(i*10))}
+            """
+            let rec = try JSONDecoder().decode(SlothRecord.self, from: Data(json.utf8))
+            store.ingest(rec)
+        }
+        XCTAssertEqual(store.ifaces.count, 1, "snapshot records replace on natural key, never append")
+        XCTAssertEqual(store.ifaces["en0"]?.rxRate, 6)
+        XCTAssertEqual(store.ifaceRxSamples["en0"], [3, 4, 5, 6])
+        XCTAssertEqual(store.ifaceTxSamples["en0"], [30, 40, 50, 60])
+    }
+
+    func testDeviceBeaconTwinReplaceOnNaturalKey() throws {
+        let store = SlothStore()
+        let device1 = """
+        {"type":"device","ts":1,"mac":"aa:bb:cc:dd:ee:ff","hostname":"a"}
+        """
+        let device2 = """
+        {"type":"device","ts":2,"mac":"aa:bb:cc:dd:ee:ff","hostname":"b"}
+        """
+        let dec = JSONDecoder()
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(device1.utf8)))
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(device2.utf8)))
+        XCTAssertEqual(store.devices.count, 1)
+        XCTAssertEqual(store.devices["aa:bb:cc:dd:ee:ff"]?.hostname, "b")
+    }
+
+    func testSnapshotRecordsCountTowardRecordsReceivedButNotRings() throws {
+        let store = SlothStore()
+        let dec = JSONDecoder()
+        let json = """
+        {"type":"iface","ts":1,"name":"en0","rx_rate":1.0,"tx_rate":2.0}
+        """
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(json.utf8)))
+        XCTAssertEqual(store.recordsReceived, 1)
+        XCTAssertEqual(store.dns.count + store.tls.count + store.connections.count, 0)
+    }
+
     func testRecordsReceivedIncrementsForEveryIngest() {
         let store = SlothStore()
         store.ingest(.dns(DNSEntry(ts: 1, qname: "a")))

@@ -63,6 +63,15 @@ public final class SlothStore {
     /// attribution that sloth synthesises from the `connections`
     /// stream; no iOS-side aggregation.
     public private(set) var processes: [Int: ProcessEntry]            = [:]
+    /// `deauth` snapshot table — keyed by `(bssid, dst)`. Each entry
+    /// tracks a 802.11 deauth frame flow; `flood = 1` marks the pair
+    /// as an active flood (same signal twin_episode chains off).
+    public private(set) var deauths: [String: DeauthEntry]            = [:]
+    /// `mdns_service` snapshot table — keyed by service instance.
+    /// Sloth's passive Bonjour/Zeroconf observer is the source.
+    public private(set) var mdnsServices: [String: MDNSServiceEntry]  = [:]
+    /// `dhcp_lease` snapshot table — keyed by IP.
+    public private(set) var dhcpLeases: [String: DHCPLeaseEntry]      = [:]
 
     /// Per-iface rate sample series — appended on each `iface` snapshot
     /// so InterfacesView can draw a 60-sample sparkline of rx + tx.
@@ -130,6 +139,9 @@ public final class SlothStore {
         case .twinEpisode (let e): twinEpisodes[e.id] = e
         case .topHost     (let e): ingestTopHost(e)
         case .process     (let e): ingestProcess(e)
+        case .deauth      (let e): deauths[e.id] = e
+        case .mdnsService (let e): mdnsServices[e.instance] = e
+        case .dhcpLease   (let e): dhcpLeases[e.ip] = e
         case .unknown:             unknownCount += 1
         }
         recordsReceived += 1
@@ -177,6 +189,9 @@ public final class SlothStore {
         twinEpisodes.removeAll()
         topHosts.removeAll()
         processes.removeAll()
+        deauths.removeAll()
+        mdnsServices.removeAll()
+        dhcpLeases.removeAll()
         ifaceRxSamples.removeAll()
         ifaceTxSamples.removeAll()
         topHostRxSamples.removeAll()

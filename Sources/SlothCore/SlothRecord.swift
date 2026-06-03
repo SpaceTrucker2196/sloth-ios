@@ -31,6 +31,9 @@ public enum SlothRecord: Sendable, Equatable {
     case twinEpisode(TwinEpisodeEntry)
     case topHost(TopHostEntry)
     case process(ProcessEntry)
+    case deauth(DeauthEntry)
+    case mdnsService(MDNSServiceEntry)
+    case dhcpLease(DHCPLeaseEntry)
     case unknown(type: String, ts: Int)
 
     public var ts: Int {
@@ -49,6 +52,9 @@ public enum SlothRecord: Sendable, Equatable {
         case .twinEpisode(let e): return e.ts
         case .topHost    (let e): return e.ts
         case .process    (let e): return e.ts
+        case .deauth     (let e): return e.ts
+        case .mdnsService(let e): return e.ts
+        case .dhcpLease  (let e): return e.ts
         case .unknown(_, let ts): return ts
         }
     }
@@ -69,6 +75,9 @@ public enum SlothRecord: Sendable, Equatable {
         case .twinEpisode: return "twin_episode"
         case .topHost:     return "top_host"
         case .process:     return "process"
+        case .deauth:      return "deauth"
+        case .mdnsService: return "mdns_service"
+        case .dhcpLease:   return "dhcp_lease"
         case .unknown(let t, _): return t
         }
     }
@@ -101,6 +110,9 @@ extension SlothRecord: Decodable {
         case "twin_episode":self = .twinEpisode(try TwinEpisodeEntry(from: decoder))
         case "top_host":    self = .topHost    (try TopHostEntry    (from: decoder))
         case "process":     self = .process    (try ProcessEntry    (from: decoder))
+        case "deauth":      self = .deauth     (try DeauthEntry     (from: decoder))
+        case "mdns_service":self = .mdnsService(try MDNSServiceEntry(from: decoder))
+        case "dhcp_lease":  self = .dhcpLease  (try DHCPLeaseEntry  (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             self = .unknown(type: tag, ts: ts)
@@ -125,6 +137,9 @@ extension SlothRecord: Encodable {
         case .twinEpisode(let e): try e.encode(to: encoder)
         case .topHost    (let e): try e.encode(to: encoder)
         case .process    (let e): try e.encode(to: encoder)
+        case .deauth     (let e): try e.encode(to: encoder)
+        case .mdnsService(let e): try e.encode(to: encoder)
+        case .dhcpLease  (let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
@@ -976,5 +991,144 @@ public struct ProcessEntry: Sendable, Codable, Equatable, Identifiable {
         try c.encode(txRate,    forKey: .txRate)
         try c.encode(rxRate,    forKey: .rxRate)
         try c.encode(ports,     forKey: .ports)
+    }
+}
+
+/// `deauth` — one entry per (bssid, dst) frame flow sloth has seen
+/// in 802.11 deauthenticate frames. `flood = 1` means sloth's
+/// deauth detector classified this as an active flood (the same
+/// signal `twin_episode.attack_in_progress` chains off of); `count`
+/// is the total observed frame count for the pair.
+public struct DeauthEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "deauth" }
+    public let ts: Int
+    public let src: String?
+    public let dst: String
+    public let bssid: String
+    public let reason: Int?
+    public let subtype: Int?
+    public let firstSeen: Int
+    public let lastSeen: Int
+    public let count: Int
+    public let flood: Int
+
+    public var id: String { "\(bssid)|\(dst)" }
+
+    /// `true` if sloth's detector classified this pair as an active
+    /// flood. The view escalates the row hue to WARN/CRIT on this.
+    public var isFlood: Bool { flood != 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, src, dst, bssid, reason, subtype, count, flood
+        case firstSeen = "first_seen"
+        case lastSeen  = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts        = try c.decode(Int.self, forKey: .ts)
+        self.src       = try c.decodeIfPresent(String.self, forKey: .src)
+        self.dst       = try c.decode(String.self, forKey: .dst)
+        self.bssid     = try c.decode(String.self, forKey: .bssid)
+        self.reason    = try c.decodeIfPresent(Int.self,    forKey: .reason)
+        self.subtype   = try c.decodeIfPresent(Int.self,    forKey: .subtype)
+        self.firstSeen = try c.decodeIfPresent(Int.self,    forKey: .firstSeen) ?? 0
+        self.lastSeen  = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)  ?? 0
+        self.count     = try c.decodeIfPresent(Int.self,    forKey: .count)     ?? 0
+        self.flood     = try c.decodeIfPresent(Int.self,    forKey: .flood)     ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encodeIfPresent(src, forKey: .src)
+        try c.encode(dst,   forKey: .dst)
+        try c.encode(bssid, forKey: .bssid)
+        try c.encodeIfPresent(reason,  forKey: .reason)
+        try c.encodeIfPresent(subtype, forKey: .subtype)
+        try c.encode(firstSeen, forKey: .firstSeen)
+        try c.encode(lastSeen,  forKey: .lastSeen)
+        try c.encode(count,     forKey: .count)
+        try c.encode(flood,     forKey: .flood)
+    }
+}
+
+/// `mdns_service` — one entry per Bonjour / Zeroconf service
+/// instance sloth has observed (passively, off UDP/5353). Keyed by
+/// the full service instance string (e.g. "Living-Room Apple
+/// TV._airplay._tcp.local.").
+public struct MDNSServiceEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "mdns_service" }
+    public let ts: Int
+    public let instance: String
+    public let service: String?
+    public let host: String?
+    public let ip: String?
+    public let port: Int?
+    public let lastSeen: Int
+
+    public var id: String { instance }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, instance, service, host, ip, port
+        case lastSeen = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts       = try c.decode(Int.self,    forKey: .ts)
+        self.instance = try c.decode(String.self, forKey: .instance)
+        self.service  = try c.decodeIfPresent(String.self, forKey: .service)
+        self.host     = try c.decodeIfPresent(String.self, forKey: .host)
+        self.ip       = try c.decodeIfPresent(String.self, forKey: .ip)
+        self.port     = try c.decodeIfPresent(Int.self,    forKey: .port)
+        self.lastSeen = try c.decodeIfPresent(Int.self,    forKey: .lastSeen) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,     forKey: .type)
+        try c.encode(ts,       forKey: .ts)
+        try c.encode(instance, forKey: .instance)
+        try c.encodeIfPresent(service, forKey: .service)
+        try c.encodeIfPresent(host,    forKey: .host)
+        try c.encodeIfPresent(ip,      forKey: .ip)
+        try c.encodeIfPresent(port,    forKey: .port)
+        try c.encode(lastSeen, forKey: .lastSeen)
+    }
+}
+
+/// `dhcp_lease` — one entry per DHCP lease sloth has observed on the
+/// LAN. `expire = 0` means sloth doesn't know (typical when the lease
+/// was observed via a renewal rather than a fresh DISCOVER/OFFER).
+public struct DHCPLeaseEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "dhcp_lease" }
+    public let ts: Int
+    public let ip: String
+    public let hostname: String?
+    public let expire: Int
+
+    public var id: String { ip }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, ip, hostname, expire
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts       = try c.decode(Int.self,    forKey: .ts)
+        self.ip       = try c.decode(String.self, forKey: .ip)
+        self.hostname = try c.decodeIfPresent(String.self, forKey: .hostname)
+        self.expire   = try c.decodeIfPresent(Int.self,    forKey: .expire) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(ip,   forKey: .ip)
+        try c.encodeIfPresent(hostname, forKey: .hostname)
+        try c.encode(expire, forKey: .expire)
     }
 }

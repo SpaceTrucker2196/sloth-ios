@@ -1,15 +1,26 @@
-// TwinsView — evil-twin AP detector readout, built from sloth's
-// `twin_episode` snapshot records (`docs/wiki/jsonl-schema.md` plus
-// `sloth/docs/wiki/evil-twin-reproducer.md`).
+// TwinsView — 802.11 attack-surface readout. Two sections sharing
+// one screen because they share the same threat model:
 //
-// Each row is one detected pair (`ssid, real_bssid, twin_bssid`).
-// Severity ladder (sloth-ios's mapping; see TwinEpisodeEntry.severity):
+//   1. Evil-twin AP pair detections (`twin_episode` records).
+//   2. Deauthenticate-frame flows (`deauth` records). A deauth flood
+//      is the kick-off move in most evil-twin attacks
+//      (`sloth/docs/wiki/evil-twin-reproducer.md`); when it precedes
+//      a twin appearing within 5 s, sloth's chain rule tags the twin
+//      with `attack_in_progress=1`.
+//
+// Twin severity ladder (TwinEpisodeEntry.severity):
 //   * attack_in_progress=1                              → CRIT (red)
 //   * attacker_oui ∨ hash_mismatch ∨ swing≥15 dB        → WARN (orange)
 //   * passive detection only                            → LOW  (yellow)
 //
-// Sorted highest-severity first; sub-sorted by twin RSSI (closest
-// first — the rogue you can actually see).
+// Deauth row severity:
+//   * flood = 1   → WARN (orange) — sloth's flood detector hit
+//   * count ≥ 10  → LOW  (yellow) — chatter worth noticing
+//   * otherwise   → secondary
+//
+// Twins sort: highest-severity first; sub-sorted by twin RSSI
+// (closest first — the rogue you can actually see).
+// Deauths sort: floods first, then by frame count desc.
 
 import SwiftUI
 import SlothCore
@@ -19,31 +30,132 @@ struct TwinsView: View {
     @Environment(SlothStore.self) private var store
 
     var body: some View {
-        let rows = sorted(store.twinEpisodes.values)
+        let twins   = sortedTwins(store.twinEpisodes.values)
+        let deauths = sortedDeauths(store.deauths.values)
         Group {
-            if rows.isEmpty {
+            if twins.isEmpty && deauths.isEmpty {
                 ContentUnavailableView(
-                    "No twin episodes",
+                    "Nothing to flag",
                     systemImage: "shield.checkered",
-                    description: Text("Sloth's evil-twin detector emits a `twin_episode` record per suspected rogue AP pair per second. An empty list is the desired state.")
+                    description: Text("Sloth's evil-twin detector and deauth-flood tracker both report empty — the desired state.")
                 )
             } else {
-                List(rows) { episode in
-                    TwinRow(episode: episode)
-                        .listRowSeparator(.hidden)
+                List {
+                    Section {
+                        if twins.isEmpty {
+                            quietRow("No twin pairs")
+                        } else {
+                            ForEach(twins) { episode in
+                                TwinRow(episode: episode)
+                            }
+                        }
+                    } header: {
+                        Label("Twin AP pairs (\(twins.count))",
+                              systemImage: "shield.checkered")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                    }
+                    Section {
+                        if deauths.isEmpty {
+                            quietRow("No deauth flows")
+                        } else {
+                            ForEach(deauths) { d in
+                                DeauthRow(deauth: d)
+                            }
+                        }
+                    } header: {
+                        Label("Deauth flows (\(deauths.count))",
+                              systemImage: "antenna.radiowaves.left.and.right.slash")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                    }
                 }
                 .listStyle(.plain)
             }
         }
-        .navigationTitle("Twins")
+        .navigationTitle("Twins & deauth")
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func sorted(_ values: Dictionary<String, TwinEpisodeEntry>.Values) -> [TwinEpisodeEntry] {
+    private func sortedTwins(_ values: Dictionary<String, TwinEpisodeEntry>.Values) -> [TwinEpisodeEntry] {
         values.sorted { lhs, rhs in
             if lhs.severity != rhs.severity { return lhs.severity.rawValue > rhs.severity.rawValue }
             return lhs.twinRSSI > rhs.twinRSSI    // closer twin first
         }
+    }
+
+    private func sortedDeauths(_ values: Dictionary<String, DeauthEntry>.Values) -> [DeauthEntry] {
+        values.sorted { lhs, rhs in
+            if lhs.isFlood != rhs.isFlood { return lhs.isFlood && !rhs.isFlood }
+            if lhs.count != rhs.count     { return lhs.count > rhs.count }
+            return lhs.lastSeen > rhs.lastSeen
+        }
+    }
+
+    private func quietRow(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.monospaced())
+            .foregroundStyle(.tertiary)
+            .padding(.vertical, 4)
+    }
+}
+
+private struct DeauthRow: View {
+
+    let deauth: DeauthEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: tierIcon)
+                    .foregroundStyle(tierTint)
+                Text(deauth.bssid)
+                    .font(.callout.monospaced().weight(.semibold))
+                    .foregroundStyle(tierTint)
+                    .lineLimit(1)
+                Spacer()
+                if deauth.isFlood {
+                    Text("FLOOD")
+                        .font(.caption2.weight(.heavy))
+                        .foregroundStyle(.alertHotWarn)
+                }
+                Text("\(deauth.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 8) {
+                if let src = deauth.src, src != deauth.bssid {
+                    labeled("src", src)
+                }
+                labeled("dst", deauth.dst)
+                if let reason = deauth.reason {
+                    labeled("rsn", "\(reason)")
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var tierIcon: String {
+        if deauth.isFlood   { return "exclamationmark.triangle.fill" }
+        if deauth.count >= 10 { return "exclamationmark.circle" }
+        return "antenna.radiowaves.left.and.right.slash"
+    }
+
+    private var tierTint: Color {
+        if deauth.isFlood   { return .alertHotWarn }
+        if deauth.count >= 10 { return .alertHotLow }
+        return .secondary
+    }
+
+    private func labeled(_ key: String, _ value: String) -> some View {
+        HStack(spacing: 3) {
+            Text(key).foregroundStyle(.tertiary)
+            Text(value).foregroundStyle(.secondary)
+        }
+        .font(.caption2.monospaced())
     }
 }
 

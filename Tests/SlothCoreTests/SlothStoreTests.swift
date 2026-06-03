@@ -123,6 +123,45 @@ final class SlothStoreTests: XCTestCase {
         XCTAssertEqual(store.processTxSamples[501], [30, 40, 50])
     }
 
+    func testDeauthMDNSDHCPReplaceOnNaturalKey() throws {
+        let store = SlothStore()
+        let dec = JSONDecoder()
+        let a = """
+        {"type":"deauth","ts":1,"src":"a","dst":"b","bssid":"x","count":1,"flood":0}
+        """
+        let b = """
+        {"type":"deauth","ts":2,"src":"a","dst":"b","bssid":"x","count":99,"flood":1}
+        """
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(a.utf8)))
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(b.utf8)))
+        XCTAssertEqual(store.deauths.count, 1)
+        XCTAssertEqual(store.deauths["x|b"]?.count, 99)
+        XCTAssertTrue(store.deauths["x|b"]!.isFlood)
+
+        let m1 = """
+        {"type":"mdns_service","ts":1,"instance":"i","service":"_x._tcp","host":"a","ip":"1.1.1.1","port":80,"last_seen":1}
+        """
+        let m2 = """
+        {"type":"mdns_service","ts":2,"instance":"i","service":"_x._tcp","host":"a","ip":"1.1.1.1","port":8080,"last_seen":2}
+        """
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(m1.utf8)))
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(m2.utf8)))
+        XCTAssertEqual(store.mdnsServices.count, 1)
+        XCTAssertEqual(store.mdnsServices["i"]?.port, 8080)
+
+        let d1 = """
+        {"type":"dhcp_lease","ts":1,"ip":"192.168.1.5","hostname":"old","expire":100}
+        """
+        let d2 = """
+        {"type":"dhcp_lease","ts":2,"ip":"192.168.1.5","hostname":"new","expire":200}
+        """
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(d1.utf8)))
+        store.ingest(try dec.decode(SlothRecord.self, from: Data(d2.utf8)))
+        XCTAssertEqual(store.dhcpLeases.count, 1)
+        XCTAssertEqual(store.dhcpLeases["192.168.1.5"]?.hostname, "new")
+        XCTAssertEqual(store.dhcpLeases["192.168.1.5"]?.expire, 200)
+    }
+
     func testSnapshotRecordsCountTowardRecordsReceivedButNotRings() throws {
         let store = SlothStore()
         let dec = JSONDecoder()

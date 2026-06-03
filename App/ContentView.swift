@@ -117,6 +117,9 @@ struct ContentView: View {
             NavigationStack { DevicesView() }
                 .tabItem { Label("Devices", systemImage: "rectangle.connected.to.line.below") }
 
+            NavigationStack { LANView() }
+                .tabItem { Label("LAN", systemImage: "dot.radiowaves.left.and.right") }
+
             // Hosts + Flows are reachable from HomeView's "All →"
             // section headers; keeping them off the tab bar avoids the
             // M7 overlap and frees a tab slot.
@@ -138,13 +141,17 @@ struct ContentView: View {
         }
     }
 
-    /// Count of twin episodes whose severity is WARN or CRIT — what
-    /// the operator wants to be paged about. LOW is passive detection
-    /// only and would be noisy as a tab badge.
+    /// Tab badge: twin episodes at WARN+ plus any deauth flow sloth
+    /// has classified as a flood. LOW twins and low-volume deauth
+    /// chatter would be noisy as a badge so they're excluded.
     private var twinCount: Int {
-        store.twinEpisodes.values.reduce(0) { acc, e in
+        let highSevTwins = store.twinEpisodes.values.reduce(0) { acc, e in
             acc + (e.severity == .low ? 0 : 1)
         }
+        let floods = store.deauths.values.reduce(0) { acc, d in
+            acc + (d.isFlood ? 1 : 0)
+        }
+        return highSevTwins + floods
     }
 
     private func severityCount(_ sev: AlertSeverity) -> Int {

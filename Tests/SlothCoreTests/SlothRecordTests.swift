@@ -229,6 +229,46 @@ final class SlothRecordTests: XCTestCase {
         XCTAssertEqual(e.ports, [], "missing ports should decode as empty, not nil")
     }
 
+    func testDecodeDeauth() throws {
+        let json = #"""
+        {"type":"deauth","ts":1716700400,"src":"aa:bb:cc:01:02:03","dst":"ff:ff:ff:ff:ff:ff","bssid":"aa:bb:cc:01:02:03","reason":7,"subtype":12,"first_seen":1716700300,"last_seen":1716700400,"count":42,"flood":1}
+        """#
+        guard case .deauth(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.bssid, "aa:bb:cc:01:02:03")
+        XCTAssertEqual(e.dst, "ff:ff:ff:ff:ff:ff")
+        XCTAssertEqual(e.count, 42)
+        XCTAssertTrue(e.isFlood)
+        XCTAssertEqual(e.id, "aa:bb:cc:01:02:03|ff:ff:ff:ff:ff:ff")
+    }
+
+    func testDecodeMDNSService() throws {
+        let json = #"""
+        {"type":"mdns_service","ts":1716700401,"instance":"Living-Room Apple TV._airplay._tcp.local.","service":"_airplay._tcp","host":"appletv.local.","ip":"192.168.1.20","port":7000,"last_seen":1716700401}
+        """#
+        guard case .mdnsService(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.service, "_airplay._tcp")
+        XCTAssertEqual(e.port, 7000)
+        XCTAssertEqual(e.ip, "192.168.1.20")
+    }
+
+    func testDecodeDHCPLease() throws {
+        let json = #"""
+        {"type":"dhcp_lease","ts":1716700402,"ip":"192.168.1.5","hostname":"laptop","expire":1716750000}
+        """#
+        guard case .dhcpLease(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.ip, "192.168.1.5")
+        XCTAssertEqual(e.hostname, "laptop")
+        XCTAssertEqual(e.expire, 1716750000)
+    }
+
+    func testDHCPLeaseExpireDefaultsToZero() throws {
+        let json = #"""
+        {"type":"dhcp_lease","ts":1,"ip":"192.168.1.6"}
+        """#
+        guard case .dhcpLease(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.expire, 0, "missing expire (renewal-observed lease) must decode as 0")
+    }
+
     func testTwinEpisodeSeverityLadder() {
         func make(attack: Int, oui: Int, hash: Int, swing: Int) -> TwinEpisodeEntry {
             let json = """

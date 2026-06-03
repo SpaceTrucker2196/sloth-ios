@@ -59,6 +59,10 @@ public final class SlothStore {
     /// per-protocol log rings. Sloth's `src/top_hosts.c` is the
     /// authoritative source; the consumer just renders.
     public private(set) var topHosts: [String: TopHostEntry]          = [:]
+    /// `process` snapshot table — keyed by PID. Per-process bandwidth
+    /// attribution that sloth synthesises from the `connections`
+    /// stream; no iOS-side aggregation.
+    public private(set) var processes: [Int: ProcessEntry]            = [:]
 
     /// Per-iface rate sample series — appended on each `iface` snapshot
     /// so InterfacesView can draw a 60-sample sparkline of rx + tx.
@@ -72,6 +76,11 @@ public final class SlothStore {
     /// sparkline. Cap is `RingSizes.topHostSamples`.
     public private(set) var topHostRxSamples: [String: [Double]] = [:]
     public private(set) var topHostTxSamples: [String: [Double]] = [:]
+
+    /// Per-PID rate sample tails for ProcessesView. Same cadence
+    /// (1 sample/sec) and cap as the top-host tails. Keyed by PID.
+    public private(set) var processRxSamples: [Int: [Double]] = [:]
+    public private(set) var processTxSamples: [Int: [Double]] = [:]
 
     /// Alerts ring. Keyed by `entry.key ?? entry.title` so successive
     /// hits for the same alert replace (and refresh) the prior row —
@@ -120,6 +129,7 @@ public final class SlothStore {
         case .beacon      (let e): beacons[e.bssid] = e
         case .twinEpisode (let e): twinEpisodes[e.id] = e
         case .topHost     (let e): ingestTopHost(e)
+        case .process     (let e): ingestProcess(e)
         case .unknown:             unknownCount += 1
         }
         recordsReceived += 1
@@ -166,10 +176,13 @@ public final class SlothStore {
         beacons.removeAll()
         twinEpisodes.removeAll()
         topHosts.removeAll()
+        processes.removeAll()
         ifaceRxSamples.removeAll()
         ifaceTxSamples.removeAll()
         topHostRxSamples.removeAll()
         topHostTxSamples.removeAll()
+        processRxSamples.removeAll()
+        processTxSamples.removeAll()
         unknownCount = 0
         recordsReceived = 0
         connectionState = .idle
@@ -206,10 +219,31 @@ public final class SlothStore {
                      into: \.topHostTxSamples, cap: sizes.topHostSamples)
     }
 
+    private func ingestProcess(_ entry: ProcessEntry) {
+        processes[entry.pid] = entry
+        appendSample(entry.rxRate, key: entry.pid,
+                     into: \.processRxSamples, cap: sizes.topHostSamples)
+        appendSample(entry.txRate, key: entry.pid,
+                     into: \.processTxSamples, cap: sizes.topHostSamples)
+    }
+
     private func appendSample(
         _ value: Double,
         key: String,
         into keyPath: ReferenceWritableKeyPath<SlothStore, [String: [Double]]>,
+        cap: Int
+    ) {
+        var series = self[keyPath: keyPath][key] ?? []
+        series.append(value)
+        let overflow = series.count - cap
+        if overflow > 0 { series.removeFirst(overflow) }
+        self[keyPath: keyPath][key] = series
+    }
+
+    private func appendSample(
+        _ value: Double,
+        key: Int,
+        into keyPath: ReferenceWritableKeyPath<SlothStore, [Int: [Double]]>,
         cap: Int
     ) {
         var series = self[keyPath: keyPath][key] ?? []

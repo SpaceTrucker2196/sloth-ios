@@ -30,6 +30,7 @@ public enum SlothRecord: Sendable, Equatable {
     case beacon(BeaconEntry)
     case twinEpisode(TwinEpisodeEntry)
     case topHost(TopHostEntry)
+    case process(ProcessEntry)
     case unknown(type: String, ts: Int)
 
     public var ts: Int {
@@ -47,6 +48,7 @@ public enum SlothRecord: Sendable, Equatable {
         case .beacon     (let e): return e.ts
         case .twinEpisode(let e): return e.ts
         case .topHost    (let e): return e.ts
+        case .process    (let e): return e.ts
         case .unknown(_, let ts): return ts
         }
     }
@@ -66,6 +68,7 @@ public enum SlothRecord: Sendable, Equatable {
         case .beacon:      return "beacon"
         case .twinEpisode: return "twin_episode"
         case .topHost:     return "top_host"
+        case .process:     return "process"
         case .unknown(let t, _): return t
         }
     }
@@ -97,6 +100,7 @@ extension SlothRecord: Decodable {
         case "beacon":      self = .beacon     (try BeaconEntry     (from: decoder))
         case "twin_episode":self = .twinEpisode(try TwinEpisodeEntry(from: decoder))
         case "top_host":    self = .topHost    (try TopHostEntry    (from: decoder))
+        case "process":     self = .process    (try ProcessEntry    (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             self = .unknown(type: tag, ts: ts)
@@ -120,6 +124,7 @@ extension SlothRecord: Encodable {
         case .beacon     (let e): try e.encode(to: encoder)
         case .twinEpisode(let e): try e.encode(to: encoder)
         case .topHost    (let e): try e.encode(to: encoder)
+        case .process    (let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
@@ -892,5 +897,84 @@ public struct TopHostEntry: Sendable, Codable, Equatable, Identifiable {
         try c.encode(txRate,    forKey: .txRate)
         try c.encode(rxBytes,   forKey: .rxBytes)
         try c.encode(txBytes,   forKey: .txBytes)
+    }
+}
+
+/// `process` — sloth's per-PID bandwidth-attribution roll-up. A
+/// synthesis record aggregated from the `connections` stream on the
+/// producer side, so the iOS client gets "which process is making
+/// the noise" without re-implementing the aggregation.
+///
+/// `pid = -1` is sloth's "unresolved bucket" — flows it couldn't
+/// attach to a live process (closed sockets, kernel threads, etc.).
+public struct ProcessEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "process" }
+    public let ts: Int
+    public let pid: Int
+    public let proc: String?
+    public let ppid: Int?
+    public let depth: Int?
+    public let connCount: Int
+    public let tcpCount: Int
+    public let udpCount: Int
+    public let txBytes: Int
+    public let rxBytes: Int
+    public let txRate: Double
+    public let rxRate: Double
+    public let ports: [Int]
+
+    public var id: Int { pid }
+
+    /// Combined live byte rate — primary sort key for the view.
+    public var totalRate: Double { rxRate + txRate }
+
+    /// `true` for sloth's unresolved-flows bucket; the view sorts it
+    /// to the bottom and labels it explicitly.
+    public var isUnresolved: Bool { pid < 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, pid, proc, ppid, depth, ports
+        case connCount = "conn_count"
+        case tcpCount  = "tcp_count"
+        case udpCount  = "udp_count"
+        case txBytes   = "tx_bytes"
+        case rxBytes   = "rx_bytes"
+        case txRate    = "tx_rate"
+        case rxRate    = "rx_rate"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts        = try c.decode(Int.self, forKey: .ts)
+        self.pid       = try c.decode(Int.self, forKey: .pid)
+        self.proc      = try c.decodeIfPresent(String.self, forKey: .proc)
+        self.ppid      = try c.decodeIfPresent(Int.self,    forKey: .ppid)
+        self.depth     = try c.decodeIfPresent(Int.self,    forKey: .depth)
+        self.connCount = try c.decodeIfPresent(Int.self,    forKey: .connCount) ?? 0
+        self.tcpCount  = try c.decodeIfPresent(Int.self,    forKey: .tcpCount)  ?? 0
+        self.udpCount  = try c.decodeIfPresent(Int.self,    forKey: .udpCount)  ?? 0
+        self.txBytes   = try c.decodeIfPresent(Int.self,    forKey: .txBytes)   ?? 0
+        self.rxBytes   = try c.decodeIfPresent(Int.self,    forKey: .rxBytes)   ?? 0
+        self.txRate    = try c.decodeIfPresent(Double.self, forKey: .txRate)    ?? 0
+        self.rxRate    = try c.decodeIfPresent(Double.self, forKey: .rxRate)    ?? 0
+        self.ports     = try c.decodeIfPresent([Int].self,  forKey: .ports)     ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(pid,  forKey: .pid)
+        try c.encodeIfPresent(proc,  forKey: .proc)
+        try c.encodeIfPresent(ppid,  forKey: .ppid)
+        try c.encodeIfPresent(depth, forKey: .depth)
+        try c.encode(connCount, forKey: .connCount)
+        try c.encode(tcpCount,  forKey: .tcpCount)
+        try c.encode(udpCount,  forKey: .udpCount)
+        try c.encode(txBytes,   forKey: .txBytes)
+        try c.encode(rxBytes,   forKey: .rxBytes)
+        try c.encode(txRate,    forKey: .txRate)
+        try c.encode(rxRate,    forKey: .rxRate)
+        try c.encode(ports,     forKey: .ports)
     }
 }

@@ -107,6 +107,22 @@ final class SlothStoreTests: XCTestCase {
         XCTAssertEqual(store.topHostTxSamples["8.8.8.8"], [30, 40, 50])
     }
 
+    func testProcessReplacesOnPIDAndKeepsRateTail() throws {
+        let store = SlothStore(sizes: RingSizes(topHostSamples: 3))
+        let dec = JSONDecoder()
+        for i in 1...5 {
+            let json = """
+            {"type":"process","ts":\(i),"pid":501,"proc":"firefox",\
+            "conn_count":\(i),"rx_rate":\(Double(i*100)),"tx_rate":\(Double(i*10))}
+            """
+            store.ingest(try dec.decode(SlothRecord.self, from: Data(json.utf8)))
+        }
+        XCTAssertEqual(store.processes.count, 1)
+        XCTAssertEqual(store.processes[501]?.connCount, 5)
+        XCTAssertEqual(store.processRxSamples[501], [300, 400, 500])
+        XCTAssertEqual(store.processTxSamples[501], [30, 40, 50])
+    }
+
     func testSnapshotRecordsCountTowardRecordsReceivedButNotRings() throws {
         let store = SlothStore()
         let dec = JSONDecoder()

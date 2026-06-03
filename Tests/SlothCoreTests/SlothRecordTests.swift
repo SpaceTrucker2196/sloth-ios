@@ -204,6 +204,31 @@ final class SlothRecordTests: XCTestCase {
         XCTAssertEqual(e.totalRate, 1913.4, accuracy: 0.001)
     }
 
+    func testDecodeProcess() throws {
+        let json = #"""
+        {"type":"process","ts":1716700300,"pid":501,"proc":"firefox","ppid":1,"depth":2,"conn_count":12,"tcp_count":10,"udp_count":2,"tx_bytes":98765,"rx_bytes":1234567,"tx_rate":1024.0,"rx_rate":8192.0,"ports":[443,80,53]}
+        """#
+        guard case .process(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.pid, 501)
+        XCTAssertEqual(e.proc, "firefox")
+        XCTAssertEqual(e.connCount, 12)
+        XCTAssertEqual(e.tcpCount, 10)
+        XCTAssertEqual(e.udpCount, 2)
+        XCTAssertEqual(e.ports, [443, 80, 53])
+        XCTAssertFalse(e.isUnresolved)
+        XCTAssertEqual(e.totalRate, 9216.0)
+    }
+
+    func testProcessUnresolvedBucket() throws {
+        let json = #"""
+        {"type":"process","ts":1,"pid":-1,"proc":"(unresolved)","conn_count":3}
+        """#
+        guard case .process(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertTrue(e.isUnresolved)
+        XCTAssertEqual(e.pid, -1)
+        XCTAssertEqual(e.ports, [], "missing ports should decode as empty, not nil")
+    }
+
     func testTwinEpisodeSeverityLadder() {
         func make(attack: Int, oui: Int, hash: Int, swing: Int) -> TwinEpisodeEntry {
             let json = """

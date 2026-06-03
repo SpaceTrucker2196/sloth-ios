@@ -108,6 +108,9 @@ struct ContentView: View {
                 .tabItem { Label("Alerts", systemImage: "exclamationmark.triangle") }
                 .badge(severityCount(.crit))
 
+            NavigationStack { ProcessesView() }
+                .tabItem { Label("Procs", systemImage: "cpu") }
+
             NavigationStack { WiFiAPsView() }
                 .tabItem { Label("WiFi", systemImage: "wifi") }
 

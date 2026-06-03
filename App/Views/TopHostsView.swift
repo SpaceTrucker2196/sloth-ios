@@ -1,10 +1,15 @@
-// TopHostsView — M4. List of the most-active external hosts pulled
-// from the store's rings via `HostAggregator`. Each row carries an
-// inline activity sparkline (`BandwidthSparkline`); tapping pushes
-// `TopHostDetailView`. Top-of-list a stacked-area chart shows the
-// aggregate activity over the last 30 minutes split by protocol so
-// the operator can see "is this DNS noise, TLS browsing, or QUIC
-// streaming?" at a glance.
+// TopHostsView — reads sloth's `top_host` snapshot directly.
+//
+// Sloth's `src/top_hosts.c` is the authoritative source: it filters
+// for external-routable IPs, attaches the owner tag from
+// `src/ip_owner.c`, and emits one record per active entry per tick.
+// The iOS store replaces in place by IP and appends to a per-IP rate
+// tail so this view can paint a sparkline without recomputing
+// anything.
+//
+// Sort: combined live byte rate (rx + tx), descending. Hosts that
+// stop being emitted by sloth simply stop appearing in the snapshot
+// table — there's no client-side eviction policy.
 
 import SwiftUI
 import Charts
@@ -14,44 +19,44 @@ struct TopHostsView: View {
 
     @Environment(SlothStore.self) private var store
 
-    @State private var tick: Date = Date()
-    private let tickPublisher = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
-
     var body: some View {
-        let snap = HostAggregator.snapshot(from: store, now: tick)
+        let hosts = sortedHosts
         Group {
-            if snap.hosts.isEmpty {
+            if hosts.isEmpty {
                 ContentUnavailableView(
-                    "No external hosts yet",
+                    "No top hosts yet",
                     systemImage: "globe.americas",
-                    description: Text(
-                        "Hosts your network is talking to show up here as records arrive. " +
-                        "RFC1918 / loopback / multicast addresses are skipped."
-                    )
+                    description: Text("Sloth emits one `top_host` record per active external destination per second. Records appear as the stream opens.")
                 )
             } else {
                 List {
                     Section {
-                        ProtocolStackChart(hosts: snap.hosts)
-                            .frame(height: 90)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 12,
-                                                       bottom: 8, trailing: 12))
+                        BandwidthMixChart(hosts: hosts.prefix(5).map { $0 },
+                                          rxSamples: store.topHostRxSamples,
+                                          txSamples: store.topHostTxSamples)
+                            .frame(height: 100)
                             .listRowSeparator(.hidden)
                     } header: {
-                        Text("Aggregate activity, last 30 minutes")
+                        Text("Combined rate — top 5, last \(store.sizes.topHostSamples)s")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Section {
-                        ForEach(snap.hosts) { host in
+                        ForEach(hosts) { host in
                             NavigationLink {
                                 TopHostDetailView(host: host)
                             } label: {
-                                TopHostRow(host: host, hotSev: store.alertHot.severity(for: host.ip))
+                                TopHostRow(
+                                    host:       host,
+                                    rxSamples:  store.topHostRxSamples[host.ip] ?? [],
+                                    txSamples:  store.topHostTxSamples[host.ip] ?? [],
+                                    hotSev:     store.alertHot.severity(for: host.ip)
+                                )
                             }
+                            .listRowSeparator(.hidden)
                         }
                     } header: {
-                        Text("\(snap.hosts.count) hosts").font(.caption)
+                        Text("\(hosts.count) external hosts").font(.caption)
                     }
                 }
                 .listStyle(.plain)
@@ -59,15 +64,25 @@ struct TopHostsView: View {
         }
         .navigationTitle("Top hosts")
         .navigationBarTitleDisplayMode(.inline)
-        .onReceive(tickPublisher) { tick = $0 }
+    }
+
+    private var sortedHosts: [TopHostEntry] {
+        store.topHosts.values.sorted { lhs, rhs in
+            if lhs.totalRate != rhs.totalRate { return lhs.totalRate > rhs.totalRate }
+            if lhs.connCount != rhs.connCount { return lhs.connCount > rhs.connCount }
+            return lhs.ip < rhs.ip
+        }
     }
 }
 
 // MARK: - Row
 
 private struct TopHostRow: View {
-    let host: HostActivity
-    let hotSev: AlertSeverity?
+
+    let host:       TopHostEntry
+    let rxSamples:  [Double]
+    let txSamples:  [Double]
+    let hotSev:     AlertSeverity?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -82,43 +97,48 @@ private struct TopHostRow: View {
                     .fontWeight(hotSev?.prefersBold == true ? .semibold : .regular)
                     .foregroundStyle(nameTint)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 HStack(spacing: 6) {
                     Text(host.ip)
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
-                    if let hot = hotSev {
-                        Text(hot.displayName)
-                            .font(.caption2.weight(.heavy))
-                            .foregroundStyle(hot.color)
+                    if let owner = host.owner, !owner.isEmpty {
+                        Text("· \(owner)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.phosphorTeal)
                     }
                 }
+                Text(rateLine)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
             }
 
             Spacer(minLength: 8)
 
-            BandwidthSparkline(
-                samples: host.rateSamples,
-                tint: hotSev?.color
-            )
-            .frame(width: 90, height: 28)
-
-            Text("\(host.totalRecords)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 36, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 2) {
+                BandwidthSparkline(samples: combinedSamples, tint: hotSev?.color)
+                    .frame(width: 90, height: 24)
+                Text("\(host.connCount) conn")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(a11y)
     }
 
+    private var combinedSamples: [Double] {
+        zip(rxSamples, txSamples).map(+)
+    }
+
     private var displayName: String {
-        host.hostname ?? host.ip
+        host.hostname?.nilIfEmpty ?? host.ip
     }
 
     private var nameTint: Color {
-        if let hot = hotSev          { return hot.color }
-        if let brand = Theme.brand(for: host.hostname) { return brand }
+        if let hot = hotSev                            { return hot.color }
+        if let brand = Theme.brand(for: host.hostname) { return brand    }
         return .primary
     }
 
@@ -129,103 +149,83 @@ private struct TopHostRow: View {
     }
 
     private var leadingTint: Color {
-        if let hot = hotSev { return hot.color }
-        return .secondary
+        hotSev?.color ?? .secondary
+    }
+
+    private var rateLine: String {
+        "↓ \(formatRate(host.rxRate))  ↑ \(formatRate(host.txRate))"
     }
 
     private var a11y: String {
-        var parts: [String] = []
-        parts.append(displayName)
-        parts.append("\(host.totalRecords) records observed")
-        if let hot = hotSev { parts.append("Flagged \(hot.displayName) by alert engine") }
+        var parts: [String] = [displayName]
+        parts.append("\(host.connCount) connections")
+        parts.append("receiving \(formatRate(host.rxRate))")
+        parts.append("sending \(formatRate(host.txRate))")
+        if let hot = hotSev { parts.append("flagged \(hot.displayName)") }
         return parts.joined(separator: ". ")
     }
 }
 
 // MARK: - Aggregate chart
 
-private struct ProtocolStackChart: View {
-    let hosts: [HostActivity]
+/// Per-host combined-rate area chart for the top N. Reads the
+/// per-IP rate sample tails that the store already maintains —
+/// nothing aggregates here, the data is already shaped.
+private struct BandwidthMixChart: View {
+
+    let hosts: [TopHostEntry]
+    let rxSamples: [String: [Double]]
+    let txSamples: [String: [Double]]
 
     var body: some View {
-        // Sum the per-bin samples across hosts, split by source
-        // protocol via per-protocol record counts. We re-bin from
-        // the per-host totals since the per-protocol per-bin data
-        // isn't held by HostActivity (would balloon storage); the
-        // overall shape across protocols is preserved by weighting
-        // each host's bins by its per-protocol share of total.
-        let series = aggregateSeries(hosts: hosts)
-        Chart(series) { point in
+        let points = makePoints()
+        Chart(points) { point in
             AreaMark(
                 x: .value("Bin", point.bin),
-                y: .value("Count", point.count)
+                y: .value("B/s", point.value)
             )
-            .foregroundStyle(by: .value("Protocol", point.proto))
+            .foregroundStyle(by: .value("Host", point.label))
             .interpolationMethod(.monotone)
-        }
-        .chartForegroundStyleScale([
-            "TLS":  Color.phosphorBright,
-            "QUIC": Color.alertHotLow,
-            "DNS":  Color.phosphorTeal,
-            "HTTP": Color.alertHotWarn,
-        ])
-        .chartLegend(position: .bottom, spacing: 8) {
-            HStack(spacing: 12) {
-                ForEach(["TLS","QUIC","DNS","HTTP"], id: \.self) { label in
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(legendColor(for: label))
-                            .frame(width: 6, height: 6)
-                        Text(label)
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
         }
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
-    }
-
-    private func legendColor(for label: String) -> Color {
-        switch label {
-        case "TLS":  return .phosphorBright
-        case "QUIC": return .alertHotLow
-        case "DNS":  return .phosphorTeal
-        case "HTTP": return .alertHotWarn
-        default:     return .secondary
-        }
+        .chartLegend(position: .bottom, spacing: 4)
     }
 
     private struct Point: Identifiable {
         let id = UUID()
         let bin: Int
-        let proto: String
-        let count: Double
+        let label: String
+        let value: Double
     }
 
-    private func aggregateSeries(hosts: [HostActivity]) -> [Point] {
-        let bins = HostAggregator.sparkBins
+    private func makePoints() -> [Point] {
         var out: [Point] = []
-        for proto in ["TLS","QUIC","DNS","HTTP"] {
-            for i in 0..<bins {
-                var sum: Double = 0
-                for h in hosts {
-                    guard i < h.rateSamples.count else { continue }
-                    let total = max(h.totalRecords, 1)
-                    let share: Double
-                    switch proto {
-                    case "TLS":  share = Double(h.tlsCount)  / Double(total)
-                    case "QUIC": share = Double(h.quicCount) / Double(total)
-                    case "DNS":  share = Double(h.dnsCount)  / Double(total)
-                    case "HTTP": share = Double(h.httpCount) / Double(total)
-                    default:     share = 0
-                    }
-                    sum += h.rateSamples[i] * share
-                }
-                out.append(Point(bin: i, proto: proto, count: sum))
+        for h in hosts {
+            let rx = rxSamples[h.ip] ?? []
+            let tx = txSamples[h.ip] ?? []
+            let combined = zip(rx, tx).map(+)
+            let label = h.hostname?.nilIfEmpty ?? h.ip
+            for (i, v) in combined.enumerated() {
+                out.append(Point(bin: i, label: label, value: v))
             }
         }
         return out
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+/// File-private bytes/sec → human-readable. Mirrors the formatter
+/// in `InterfacesView`; small enough that duplicating beats hoisting
+/// to a shared helper file (three call sites, three lines each).
+fileprivate func formatRate(_ bps: Double) -> String {
+    switch bps {
+    case ..<1_000:         return "\(Int(bps.rounded())) B/s"
+    case ..<1_000_000:     return String(format: "%.1f KB/s", bps / 1_000)
+    case ..<1_000_000_000: return String(format: "%.2f MB/s", bps / 1_000_000)
+    default:               return String(format: "%.2f GB/s", bps / 1_000_000_000)
     }
 }

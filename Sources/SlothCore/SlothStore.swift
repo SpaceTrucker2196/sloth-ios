@@ -54,12 +54,24 @@ public final class SlothStore {
     public private(set) var devices: [String: DeviceEntry]            = [:]
     public private(set) var beacons: [String: BeaconEntry]            = [:]
     public private(set) var twinEpisodes: [String: TwinEpisodeEntry]  = [:]
+    /// `top_host` snapshot table — keyed by IP. Replaces what the
+    /// retired iOS `HostAggregator` used to reconstruct from the
+    /// per-protocol log rings. Sloth's `src/top_hosts.c` is the
+    /// authoritative source; the consumer just renders.
+    public private(set) var topHosts: [String: TopHostEntry]          = [:]
 
     /// Per-iface rate sample series — appended on each `iface` snapshot
     /// so InterfacesView can draw a 60-sample sparkline of rx + tx.
     /// Index 0 is oldest. Cap is `RingSizes.ifaceSamples`.
     public private(set) var ifaceRxSamples: [String: [Double]] = [:]
     public private(set) var ifaceTxSamples: [String: [Double]] = [:]
+
+    /// Per-IP rate sample tails for the top hosts. Sloth's `top_host`
+    /// record only carries the *current* rx/tx rate — we append it on
+    /// each tick so TopHostsView / HomeView can still paint a
+    /// sparkline. Cap is `RingSizes.topHostSamples`.
+    public private(set) var topHostRxSamples: [String: [Double]] = [:]
+    public private(set) var topHostTxSamples: [String: [Double]] = [:]
 
     /// Alerts ring. Keyed by `entry.key ?? entry.title` so successive
     /// hits for the same alert replace (and refresh) the prior row —
@@ -107,6 +119,7 @@ public final class SlothStore {
         case .device      (let e): devices[e.mac] = e
         case .beacon      (let e): beacons[e.bssid] = e
         case .twinEpisode (let e): twinEpisodes[e.id] = e
+        case .topHost     (let e): ingestTopHost(e)
         case .unknown:             unknownCount += 1
         }
         recordsReceived += 1
@@ -152,8 +165,11 @@ public final class SlothStore {
         devices.removeAll()
         beacons.removeAll()
         twinEpisodes.removeAll()
+        topHosts.removeAll()
         ifaceRxSamples.removeAll()
         ifaceTxSamples.removeAll()
+        topHostRxSamples.removeAll()
+        topHostTxSamples.removeAll()
         unknownCount = 0
         recordsReceived = 0
         connectionState = .idle
@@ -176,20 +192,31 @@ public final class SlothStore {
         // Sample series — appendKeepLast keeps the tail bounded at
         // `sizes.ifaceSamples`. We do this even when the rate is zero
         // so the sparkline shows real gaps.
-        appendSample(entry.rxRate, name: entry.name, into: \.ifaceRxSamples)
-        appendSample(entry.txRate, name: entry.name, into: \.ifaceTxSamples)
+        appendSample(entry.rxRate, key: entry.name,
+                     into: \.ifaceRxSamples, cap: sizes.ifaceSamples)
+        appendSample(entry.txRate, key: entry.name,
+                     into: \.ifaceTxSamples, cap: sizes.ifaceSamples)
+    }
+
+    private func ingestTopHost(_ entry: TopHostEntry) {
+        topHosts[entry.ip] = entry
+        appendSample(entry.rxRate, key: entry.ip,
+                     into: \.topHostRxSamples, cap: sizes.topHostSamples)
+        appendSample(entry.txRate, key: entry.ip,
+                     into: \.topHostTxSamples, cap: sizes.topHostSamples)
     }
 
     private func appendSample(
         _ value: Double,
-        name: String,
-        into keyPath: ReferenceWritableKeyPath<SlothStore, [String: [Double]]>
+        key: String,
+        into keyPath: ReferenceWritableKeyPath<SlothStore, [String: [Double]]>,
+        cap: Int
     ) {
-        var series = self[keyPath: keyPath][name] ?? []
+        var series = self[keyPath: keyPath][key] ?? []
         series.append(value)
-        let overflow = series.count - sizes.ifaceSamples
+        let overflow = series.count - cap
         if overflow > 0 { series.removeFirst(overflow) }
-        self[keyPath: keyPath][name] = series
+        self[keyPath: keyPath][key] = series
     }
 
     private func ingestAlert(_ entry: AlertEntry) {

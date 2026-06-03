@@ -85,6 +85,28 @@ final class SlothStoreTests: XCTestCase {
         XCTAssertEqual(store.devices["aa:bb:cc:dd:ee:ff"]?.hostname, "b")
     }
 
+    func testTopHostReplacesOnIPAndKeepsRateTail() throws {
+        let store = SlothStore(sizes: RingSizes(topHostSamples: 3))
+        let dec = JSONDecoder()
+        for i in 1...5 {
+            let json = """
+            {"type":"top_host","ts":\(i),"ip":"8.8.8.8","hostname":"dns.google",\
+            "owner":"Google DNS","conn_count":\(i),\
+            "rx_rate":\(Double(i*100)),"tx_rate":\(Double(i*10)),\
+            "rx_bytes":\(i*1000),"tx_bytes":\(i*100),\
+            "first_seen":0,"last_seen":\(i)}
+            """
+            store.ingest(try dec.decode(SlothRecord.self, from: Data(json.utf8)))
+        }
+        XCTAssertEqual(store.topHosts.count, 1)
+        XCTAssertEqual(store.topHosts["8.8.8.8"]?.connCount, 5)
+        XCTAssertEqual(store.topHosts["8.8.8.8"]?.rxBytes, 5000)
+        // 3-deep tail keeps the last three samples; the appendKeepLast
+        // pass on each ingest enforces the cap.
+        XCTAssertEqual(store.topHostRxSamples["8.8.8.8"], [300, 400, 500])
+        XCTAssertEqual(store.topHostTxSamples["8.8.8.8"], [30, 40, 50])
+    }
+
     func testSnapshotRecordsCountTowardRecordsReceivedButNotRings() throws {
         let store = SlothStore()
         let dec = JSONDecoder()

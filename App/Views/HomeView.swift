@@ -18,18 +18,14 @@ struct HomeView: View {
 
     @Environment(SlothStore.self) private var store
 
-    @State private var tick: Date = Date()
-    private let tickPublisher = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
-
     var body: some View {
         List {
-            HomeTopHostsSection(tick: tick)
+            HomeTopHostsSection()
             HomeConnectionsSection()
         }
         .listStyle(.plain)
         .navigationTitle("Home")
         .navigationBarTitleDisplayMode(.inline)
-        .onReceive(tickPublisher) { tick = $0 }
     }
 }
 
@@ -38,25 +34,28 @@ struct HomeView: View {
 private struct HomeTopHostsSection: View {
 
     @Environment(SlothStore.self) private var store
-    let tick: Date
 
     /// Cap mirrors what fits comfortably above the fold on iPhone
     /// without pushing the connections list off-screen.
     private let visibleCount = 6
 
     var body: some View {
-        let snap = HostAggregator.snapshot(from: store, now: tick)
+        let hosts = store.topHosts.values
+            .sorted { $0.totalRate > $1.totalRate }
+            .prefix(visibleCount)
         Section {
-            if snap.hosts.isEmpty {
+            if hosts.isEmpty {
                 emptyRow
             } else {
-                ForEach(snap.hosts.prefix(visibleCount)) { host in
+                ForEach(Array(hosts)) { host in
                     NavigationLink {
                         TopHostDetailView(host: host)
                     } label: {
                         HomeHostRow(
-                            host:   host,
-                            hotSev: store.alertHot.severity(for: host.ip)
+                            host:      host,
+                            rxSamples: store.topHostRxSamples[host.ip] ?? [],
+                            txSamples: store.topHostTxSamples[host.ip] ?? [],
+                            hotSev:    store.alertHot.severity(for: host.ip)
                         )
                     }
                 }
@@ -73,7 +72,7 @@ private struct HomeTopHostsSection: View {
     }
 
     private var emptyRow: some View {
-        Text("No external hosts yet — DNS / TLS / HTTP / QUIC traffic populates this list.")
+        Text("No external hosts yet — sloth emits `top_host` snapshot records once a destination has traffic.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .padding(.vertical, 4)
@@ -155,8 +154,10 @@ private struct HomeSectionHeader<Destination: View>: View {
 
 private struct HomeHostRow: View {
 
-    let host: HostActivity
-    let hotSev: AlertSeverity?
+    let host:      TopHostEntry
+    let rxSamples: [Double]
+    let txSamples: [Double]
+    let hotSev:    AlertSeverity?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -166,30 +167,38 @@ private struct HomeHostRow: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(host.hostname ?? host.ip)
+                Text(host.hostname?.nilIfEmpty ?? host.ip)
                     .font(.callout)
                     .fontWeight(hotSev?.prefersBold == true ? .semibold : .regular)
                     .foregroundStyle(nameTint)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(host.ip)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(host.ip)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if let owner = host.owner, !owner.isEmpty {
+                        Text("· \(owner)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.phosphorTeal)
+                            .lineLimit(1)
+                    }
+                }
             }
 
             Spacer(minLength: 8)
 
             BandwidthSparkline(
-                samples: host.rateSamples,
+                samples: zip(rxSamples, txSamples).map(+),
                 tint:    hotSev?.color
             )
             .frame(width: 64, height: 22)
 
-            Text("\(host.totalRecords)")
+            Text(briefRate)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 32, alignment: .trailing)
+                .frame(width: 56, alignment: .trailing)
         }
         .padding(.vertical, 2)
     }
@@ -209,6 +218,20 @@ private struct HomeHostRow: View {
     private var leadingTint: Color {
         hotSev?.color ?? .secondary
     }
+
+    private var briefRate: String {
+        let total = host.totalRate
+        switch total {
+        case ..<1_000:         return "\(Int(total.rounded()))B/s"
+        case ..<1_000_000:     return String(format: "%.0fKB/s", total / 1_000)
+        case ..<1_000_000_000: return String(format: "%.1fMB/s", total / 1_000_000)
+        default:               return String(format: "%.1fGB/s", total / 1_000_000_000)
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 private struct HomeConnectionRow: View {

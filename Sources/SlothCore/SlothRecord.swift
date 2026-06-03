@@ -29,6 +29,7 @@ public enum SlothRecord: Sendable, Equatable {
     case device(DeviceEntry)
     case beacon(BeaconEntry)
     case twinEpisode(TwinEpisodeEntry)
+    case topHost(TopHostEntry)
     case unknown(type: String, ts: Int)
 
     public var ts: Int {
@@ -45,6 +46,7 @@ public enum SlothRecord: Sendable, Equatable {
         case .device     (let e): return e.ts
         case .beacon     (let e): return e.ts
         case .twinEpisode(let e): return e.ts
+        case .topHost    (let e): return e.ts
         case .unknown(_, let ts): return ts
         }
     }
@@ -63,6 +65,7 @@ public enum SlothRecord: Sendable, Equatable {
         case .device:      return "device"
         case .beacon:      return "beacon"
         case .twinEpisode: return "twin_episode"
+        case .topHost:     return "top_host"
         case .unknown(let t, _): return t
         }
     }
@@ -93,6 +96,7 @@ extension SlothRecord: Decodable {
         case "device":      self = .device     (try DeviceEntry     (from: decoder))
         case "beacon":      self = .beacon     (try BeaconEntry     (from: decoder))
         case "twin_episode":self = .twinEpisode(try TwinEpisodeEntry(from: decoder))
+        case "top_host":    self = .topHost    (try TopHostEntry    (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             self = .unknown(type: tag, ts: ts)
@@ -115,6 +119,7 @@ extension SlothRecord: Encodable {
         case .device     (let e): try e.encode(to: encoder)
         case .beacon     (let e): try e.encode(to: encoder)
         case .twinEpisode(let e): try e.encode(to: encoder)
+        case .topHost    (let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
@@ -812,5 +817,80 @@ public struct TwinEpisodeEntry: Sendable, Codable, Equatable, Identifiable {
         try c.encode(attackInProgress, forKey: .attackInProgress)
         try c.encode(attackerOUI,      forKey: .attackerOUI)
         try c.encode(hashMismatch,     forKey: .hashMismatch)
+    }
+}
+
+/// `top_host` — sloth's own top-hosts roll-up. Replaces the iOS
+/// `HostAggregator` (which used to reconstruct an equivalent table
+/// from the per-protocol log rings). Carries fields the consumer
+/// couldn't compute on its own:
+///   * `owner`        — CDN / cloud / ASN tag from sloth's
+///                      `src/ip_owner.c` table
+///   * `rx_bytes` / `tx_bytes` — real cumulative byte counters
+///   * `rx_rate`  / `tx_rate`  — kernel-derived bytes/sec
+///
+/// Cadence: one record per active entry per ≈ 1 s tick. iOS replaces
+/// the entry in `SlothStore.topHosts` on each tick and appends the
+/// current rate to a small per-IP sample tail so the view can still
+/// draw a sparkline.
+public struct TopHostEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "top_host" }
+    public let ts: Int
+    public let ip: String
+    public let hostname: String?
+    public let owner: String?
+    public let firstSeen: Int
+    public let lastSeen: Int
+    public let connCount: Int
+    public let rxRate: Double
+    public let txRate: Double
+    public let rxBytes: Int
+    public let txBytes: Int
+
+    public var id: String { ip }
+
+    /// Combined live byte rate — the primary sort key for the view.
+    public var totalRate: Double { rxRate + txRate }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, ip, hostname, owner
+        case firstSeen = "first_seen"
+        case lastSeen  = "last_seen"
+        case connCount = "conn_count"
+        case rxRate    = "rx_rate"
+        case txRate    = "tx_rate"
+        case rxBytes   = "rx_bytes"
+        case txBytes   = "tx_bytes"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts        = try c.decode(Int.self,    forKey: .ts)
+        self.ip        = try c.decode(String.self, forKey: .ip)
+        self.hostname  = try c.decodeIfPresent(String.self, forKey: .hostname)
+        self.owner     = try c.decodeIfPresent(String.self, forKey: .owner)
+        self.firstSeen = try c.decodeIfPresent(Int.self,    forKey: .firstSeen) ?? 0
+        self.lastSeen  = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)  ?? 0
+        self.connCount = try c.decodeIfPresent(Int.self,    forKey: .connCount) ?? 0
+        self.rxRate    = try c.decodeIfPresent(Double.self, forKey: .rxRate)    ?? 0
+        self.txRate    = try c.decodeIfPresent(Double.self, forKey: .txRate)    ?? 0
+        self.rxBytes   = try c.decodeIfPresent(Int.self,    forKey: .rxBytes)   ?? 0
+        self.txBytes   = try c.decodeIfPresent(Int.self,    forKey: .txBytes)   ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(ip,   forKey: .ip)
+        try c.encodeIfPresent(hostname, forKey: .hostname)
+        try c.encodeIfPresent(owner,    forKey: .owner)
+        try c.encode(firstSeen, forKey: .firstSeen)
+        try c.encode(lastSeen,  forKey: .lastSeen)
+        try c.encode(connCount, forKey: .connCount)
+        try c.encode(rxRate,    forKey: .rxRate)
+        try c.encode(txRate,    forKey: .txRate)
+        try c.encode(rxBytes,   forKey: .rxBytes)
+        try c.encode(txBytes,   forKey: .txBytes)
     }
 }

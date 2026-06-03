@@ -188,6 +188,22 @@ final class SlothRecordTests: XCTestCase {
         XCTAssertEqual(e.severity, .crit, "attack_in_progress=1 must escalate to CRIT")
     }
 
+    func testDecodeTopHost() throws {
+        let json = #"""
+        {"type":"top_host","ts":1716700200,"ip":"8.8.8.8","hostname":"dns.google","owner":"Google DNS","first_seen":1716695000,"last_seen":1716700200,"conn_count":5,"rx_rate":1234.5,"tx_rate":678.9,"rx_bytes":1048576,"tx_bytes":262144}
+        """#
+        guard case .topHost(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.ip, "8.8.8.8")
+        XCTAssertEqual(e.hostname, "dns.google")
+        XCTAssertEqual(e.owner, "Google DNS")
+        XCTAssertEqual(e.connCount, 5)
+        XCTAssertEqual(e.rxRate, 1234.5)
+        XCTAssertEqual(e.txRate, 678.9)
+        XCTAssertEqual(e.rxBytes, 1048576)
+        XCTAssertEqual(e.txBytes, 262144)
+        XCTAssertEqual(e.totalRate, 1913.4, accuracy: 0.001)
+    }
+
     func testTwinEpisodeSeverityLadder() {
         func make(attack: Int, oui: Int, hash: Int, swing: Int) -> TwinEpisodeEntry {
             let json = """

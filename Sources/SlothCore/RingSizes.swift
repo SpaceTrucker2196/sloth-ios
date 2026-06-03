@@ -28,6 +28,10 @@ public struct RingSizes: Sendable, Equatable {
     /// rx/tx sparkline. Sloth emits one `iface` record per interface
     /// per ≈ 1 s tick, so 60 samples ≈ 60 s of history.
     public let ifaceSamples: Int
+    /// Per-IP rate-sample tail used by TopHostsView / HomeView. Same
+    /// cadence as iface (1 sample/sec); 120 samples ≈ 2 minutes —
+    /// matches what the operator can fit at a glance on a phone.
+    public let topHostSamples: Int
 
     public init(
         dns:    Int = 1024,
@@ -37,8 +41,9 @@ public struct RingSizes: Sendable, Equatable {
         ntp:    Int = 128,
         icmp:   Int = 256,
         alerts: Int = 128,
-        connections:  Int = 2048,
-        ifaceSamples: Int = 60
+        connections:    Int = 2048,
+        ifaceSamples:   Int = 60,
+        topHostSamples: Int = 120
     ) {
         self.dns    = dns
         self.tls    = tls
@@ -47,8 +52,9 @@ public struct RingSizes: Sendable, Equatable {
         self.ntp    = ntp
         self.icmp   = icmp
         self.alerts = alerts
-        self.connections  = connections
-        self.ifaceSamples = ifaceSamples
+        self.connections    = connections
+        self.ifaceSamples   = ifaceSamples
+        self.topHostSamples = topHostSamples
     }
 
     /// The defaults sloth-ios ships with. Mirrors sloth's TUI caps

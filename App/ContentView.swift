@@ -101,6 +101,9 @@ struct ContentView: View {
 
     private var phoneTabs: some View {
         TabView {
+            NavigationStack { HomeView() }
+                .tabItem { Label("Home", systemImage: "house") }
+
             NavigationStack { AlertsView() }
                 .tabItem { Label("Alerts", systemImage: "exclamationmark.triangle") }
                 .badge(severityCount(.crit))

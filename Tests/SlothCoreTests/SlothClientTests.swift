@@ -77,6 +77,48 @@ final class SlothClientTests: XCTestCase {
         XCTAssertEqual(got.first?.typeTag, "dns")
     }
 
+    func testWireFormatMismatchFiresOncePerStreamForCEF() async throws {
+        // Three CEF lines + one JSONL record. Mismatch handler should
+        // fire exactly once (first detected CEF line), JSONL line still
+        // decodes.
+        let cefLine    = "CEF:0|sloth-net|sloth|1|dns|dns|3|src=10.0.0.5"
+        let jsonlLine  = #"{"type":"dns","ts":1,"qname":"a"}"#
+        let payload = "\(cefLine)\n\(cefLine)\n\(jsonlLine)\n\(cefLine)\n"
+        let transport = ScriptedTransport(chunks: [Data(payload.utf8)])
+        let client = SlothClient(transport: transport)
+
+        // Atomic counter (a class instance) since the callback is
+        // @Sendable; XCTestCase isn't.
+        final class Box: @unchecked Sendable {
+            var hits: [WireFormat] = []
+        }
+        let box = Box()
+        var got: [SlothRecord] = []
+        for try await r in client.records(
+            for: profile,
+            onWireFormatMismatch: { fmt in box.hits.append(fmt) }
+        ) {
+            got.append(r)
+        }
+
+        XCTAssertEqual(box.hits, [.cef], "must fire exactly once and report CEF")
+        XCTAssertEqual(got.count, 1, "valid JSONL line still decodes alongside the CEF noise")
+    }
+
+    func testWireFormatMismatchSilentForGarbledJSON() async throws {
+        // A bad-but-JSON-looking line shouldn't trip the mismatch
+        // handler — only CEF / syslog do.
+        let transport = ScriptedTransport(chunks: [Data("not-json\n".utf8)])
+        let client = SlothClient(transport: transport)
+        final class Box: @unchecked Sendable { var hits = 0 }
+        let box = Box()
+        for try await _ in client.records(
+            for: profile,
+            onWireFormatMismatch: { _ in box.hits += 1 }
+        ) {}
+        XCTAssertEqual(box.hits, 0)
+    }
+
     func testTransportErrorPropagates() async {
         let transport = ScriptedTransport(
             chunks: [Data(#"{"type":"dns","ts":1,"qname":"a"}\#n"#.utf8)],

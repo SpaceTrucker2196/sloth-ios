@@ -130,19 +130,38 @@ public struct SlothClient: Sendable {
     /// Stream of parsed records for a profile. The stream finishes
     /// normally when the server closes, or with an error on transport
     /// failure. Garbled JSON lines are skipped (not fatal).
+    ///
+    /// `onWireFormatMismatch` (optional) fires the first time a
+    /// dropped line classifies as a non-JSONL format (CEF / RFC 5424
+    /// syslog). Set by callers that want to surface a misconfigured
+    /// `--out-format` on the producer side (sloth 1.4+); pass nil to
+    /// preserve the previous silent-drop behaviour.
     public func records(
-        for profile: ConnectionProfile
+        for profile: ConnectionProfile,
+        onWireFormatMismatch: (@Sendable (WireFormat) -> Void)? = nil
     ) -> AsyncThrowingStream<SlothRecord, any Error> {
         let chunks = transport.bytes(for: profile)
         let lines  = LineReader.lines(from: chunks)
         return AsyncThrowingStream<SlothRecord, any Error> { continuation in
             let task = Task {
                 let decoder = JSONDecoder()
+                var mismatchSurfaced = false
                 do {
                     for try await line in lines {
                         if line.isEmpty { continue }
                         if let record = try? decoder.decode(SlothRecord.self, from: line) {
                             continuation.yield(record)
+                            continue
+                        }
+                        // Decode failed. If the caller wants a hint,
+                        // sniff the line and fire once per stream when
+                        // we recognise a non-JSONL format.
+                        if !mismatchSurfaced, let handler = onWireFormatMismatch {
+                            let fmt = WireFormat.sniff(line)
+                            if fmt == .cef || fmt == .syslog {
+                                mismatchSurfaced = true
+                                handler(fmt)
+                            }
                         }
                     }
                     continuation.finish()

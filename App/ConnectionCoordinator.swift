@@ -91,9 +91,23 @@ final class ConnectionCoordinator {
 
     private func runConnectLoop(profile: ConnectionProfile, reconnector: Reconnector) async {
         log.info("net", "connect requested for \(profile.uri)")
+        // Capture `log` for the @Sendable mismatch callback so the
+        // SlothLog can record the misconfiguration without crossing
+        // a non-Sendable closure boundary.
+        let log = self.log
         while !Task.isCancelled {
             await reconnector.reset()
-            let stream = client.records(for: profile)
+            let stream = client.records(
+                for: profile,
+                onWireFormatMismatch: { fmt in
+                    Task { @MainActor in
+                        log.error(
+                            "net",
+                            "Producer is emitting \(fmt.displayName), not JSONL — set sloth's --out-format jsonl. iOS only parses JSONL."
+                        )
+                    }
+                }
+            )
             await store.ingest(stream: stream)
             log.info("net", "stream ended in state \(store.connectionState)")
             if Task.isCancelled { break }

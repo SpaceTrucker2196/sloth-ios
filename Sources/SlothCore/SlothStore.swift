@@ -95,6 +95,13 @@ public final class SlothStore {
     public private(set) var eapols: [String: EAPOLEntry]              = [:]
     /// `scan_entry` snapshot table — keyed by IP.
     public private(set) var scans: [String: ScanEntry]                = [:]
+    /// `wifi_ap` snapshot table — keyed by BSSID. Smaller and active-
+    /// scan-derived; complements the passive `beacons` table.
+    public private(set) var wifiAPs: [String: WiFiAPEntry]            = [:]
+    /// `wifi_sta` snapshot table — keyed by station MAC. Per-station
+    /// kernel-derived throughput; the only place on the wire that
+    /// carries real WiFi link rates per client.
+    public private(set) var wifiSTAs: [String: WiFiSTAEntry]          = [:]
 
     /// `packet` event ring. Unlike the snapshot tables, sloth's
     /// `(ts_sec, ts_usec, src, dst)` natural identity is essentially
@@ -183,6 +190,8 @@ public final class SlothStore {
         case .eapol       (let e): eapols[e.id] = e
         case .scanEntry   (let e): scans[e.ip] = e
         case .packet      (let e): append(e, into: \.packets, cap: sizes.packets)
+        case .wifiAP      (let e): wifiAPs[e.bssid] = e
+        case .wifiSTA     (let e): wifiSTAs[e.mac] = e
         case .unknown:             unknownCount += 1
         }
         recordsReceived += 1
@@ -244,6 +253,8 @@ public final class SlothStore {
         assocs.removeAll()
         eapols.removeAll()
         scans.removeAll()
+        wifiAPs.removeAll()
+        wifiSTAs.removeAll()
         packets.removeAll()
         ifaceRxSamples.removeAll()
         ifaceTxSamples.removeAll()

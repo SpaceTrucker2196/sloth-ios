@@ -36,7 +36,14 @@ struct WiFiView: View {
                     section("APs",
                             count:  beacons.count,
                             symbol: "wifi") {
-                        ForEach(beacons) { BeaconRow(beacon: $0) }
+                        ForEach(beacons) { b in
+                            BeaconRow(beacon: b, wifiAP: store.wifiAPs[b.bssid])
+                        }
+                    }
+                    section("Stations",
+                            count:  store.wifiSTAs.count,
+                            symbol: "wave.3.right") {
+                        ForEach(sortedSTAs) { StationRow(sta: $0) }
                     }
                     section("Nearby clients",
                             count:  store.probeClients.count,
@@ -79,7 +86,8 @@ struct WiFiView: View {
     private var isEmpty: Bool {
         store.beacons.isEmpty && store.probeClients.isEmpty &&
         store.assocs.isEmpty  && store.eapols.isEmpty &&
-        store.channelSummaries.isEmpty && store.seqnumCorrelations.isEmpty
+        store.channelSummaries.isEmpty && store.seqnumCorrelations.isEmpty &&
+        store.wifiAPs.isEmpty && store.wifiSTAs.isEmpty
     }
 
     private var sortedBeacons: [BeaconEntry] {
@@ -115,6 +123,14 @@ struct WiFiView: View {
     private var sortedCorrelations: [SeqnumCorrelationEntry] {
         store.seqnumCorrelations.values.sorted { $0.dtMS < $1.dtMS } // tighter pairs first
     }
+    private var sortedSTAs: [WiFiSTAEntry] {
+        // Highest combined link rate first — actual WiFi bandwidth
+        // attribution by station.
+        store.wifiSTAs.values.sorted { lhs, rhs in
+            if lhs.totalKbps != rhs.totalKbps { return lhs.totalKbps > rhs.totalKbps }
+            return lhs.connectedSecs > rhs.connectedSecs
+        }
+    }
 
     @ViewBuilder
     private func section<C: View>(
@@ -143,14 +159,26 @@ struct WiFiView: View {
 private struct BeaconRow: View {
 
     let beacon: BeaconEntry
+    var wifiAP: WiFiAPEntry? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(spacing: 6) {
                 Text(displaySSID)
                     .font(.callout.monospaced().weight(.semibold))
                     .foregroundStyle(.phosphorBright)
                     .lineLimit(1)
+                if wifiAP?.isConnected == true {
+                    Text("CONNECTED")
+                        .font(.caption2.weight(.heavy))
+                        .foregroundStyle(.phosphorBright)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .stroke(Color.phosphorBright, lineWidth: 1)
+                        )
+                }
                 Spacer()
                 if let sig = beacon.signalDBM {
                     Text("\(sig) dBm")
@@ -188,6 +216,99 @@ private struct BeaconRow: View {
 }
 
 // MARK: - New rows
+
+private struct StationRow: View {
+
+    let sta: WiFiSTAEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: idleIcon)
+                    .imageScale(.small)
+                    .foregroundStyle(idleTint)
+                Text(sta.mac)
+                    .font(.callout.monospaced().weight(.semibold))
+                    .foregroundStyle(.phosphorBright)
+                Spacer()
+                if let sig = sta.signalDBM {
+                    Text("\(sig) dBm").font(.caption.monospacedDigit())
+                        .foregroundStyle(signalTint(sig))
+                }
+            }
+            HStack(spacing: 10) {
+                Label(formatKbps(sta.rxRateKbps), systemImage: "arrow.down")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.phosphorTeal)
+                Label(formatKbps(sta.txRateKbps), systemImage: "arrow.up")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.alertHotLow)
+                Spacer()
+                Text(connectedText)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 10) {
+                Text("rx \(formatBytes(sta.rxBytes))")
+                Text("tx \(formatBytes(sta.txBytes))")
+                Spacer()
+                Text("idle \(formatIdle(sta.inactiveMS))")
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// >60 s idle → secondary; <5 s idle → bright phosphor.
+    private var idleIcon: String {
+        sta.inactiveMS < 5_000 ? "wave.3.right.circle.fill" : "wave.3.right.circle"
+    }
+    private var idleTint: Color {
+        switch sta.inactiveMS {
+        case ..<5_000:   return .phosphorBright
+        case ..<60_000:  return .phosphorTeal
+        case ..<300_000: return .alertHotLow
+        default:         return .secondary
+        }
+    }
+
+    private var connectedText: String {
+        let s = sta.connectedSecs
+        switch s {
+        case ..<60:    return "\(s)s up"
+        case ..<3600:  return "\(s / 60)m up"
+        default:       return "\(s / 3600)h up"
+        }
+    }
+
+    private func formatKbps(_ kbps: Int) -> String {
+        switch kbps {
+        case ..<1_000:        return "\(kbps) Kb/s"
+        case ..<1_000_000:    return String(format: "%.1f Mb/s", Double(kbps) / 1_000)
+        default:              return String(format: "%.2f Gb/s", Double(kbps) / 1_000_000)
+        }
+    }
+
+    private func formatBytes(_ bytes: Int) -> String {
+        let v = Double(bytes)
+        switch v {
+        case ..<1_024:                   return "\(bytes) B"
+        case ..<(1_024 * 1_024):         return String(format: "%.1f KiB", v / 1_024)
+        case ..<(1_024 * 1_024 * 1_024): return String(format: "%.1f MiB", v / (1_024 * 1_024))
+        default:                         return String(format: "%.2f GiB", v / (1_024 * 1_024 * 1_024))
+        }
+    }
+
+    private func formatIdle(_ ms: Int) -> String {
+        switch ms {
+        case ..<1_000:    return "\(ms)ms"
+        case ..<60_000:   return "\(ms / 1_000)s"
+        case ..<3_600_000: return "\(ms / 60_000)m"
+        default:          return "\(ms / 3_600_000)h"
+        }
+    }
+}
 
 private struct NearbyClientRow: View {
 

@@ -100,6 +100,31 @@ final class MoreSnapshotRecordTests: XCTestCase {
         XCTAssertEqual(e.ports, [22, 23, 80, 443, 3389])
     }
 
+    func testDecodeWiFiAPConnected() throws {
+        let json = #"{"type":"wifi_ap","ts":100,"bssid":"aa:bb:cc:01:02:03","ssid":"Home","signal_dbm":-42,"channel":36,"enc":"WPA3","status":"CONNECTED"}"#
+        guard case .wifiAP(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.ssid, "Home")
+        XCTAssertTrue(e.isConnected, "CONNECTED status must light up isConnected")
+    }
+
+    func testWiFiAPConnectedAliasesForFutureProducerRename() throws {
+        // A future sloth that emits "ASSOCIATED" instead of "CONNECTED"
+        // shouldn't silently lose the indicator on the consumer side.
+        let json = #"{"type":"wifi_ap","ts":1,"bssid":"x","status":"ASSOCIATED"}"#
+        guard case .wifiAP(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertTrue(e.isConnected)
+    }
+
+    func testDecodeWiFiSTA() throws {
+        let json = #"{"type":"wifi_sta","ts":101,"mac":"11:22:33:44:55:66","signal_dbm":-58,"tx_rate_kbps":866000,"rx_rate_kbps":650000,"connected_secs":3600,"inactive_ms":120,"tx_bytes":12345678,"rx_bytes":98765432}"#
+        guard case .wifiSTA(let e) = try decode(json) else { return XCTFail() }
+        XCTAssertEqual(e.mac, "11:22:33:44:55:66")
+        XCTAssertEqual(e.txRateKbps, 866000)
+        XCTAssertEqual(e.rxRateKbps, 650000)
+        XCTAssertEqual(e.totalKbps, 1516000)
+        XCTAssertEqual(e.connectedSecs, 3600)
+    }
+
     func testDecodePacket() throws {
         let json = #"{"type":"packet","ts":12,"ts_sec":12,"ts_usec":345678,"src":"10.0.0.5","dst":"8.8.8.8","src_port":54321,"dst_port":53,"proto":"udp","len":74,"info":"DNS A example.com"}"#
         guard case .packet(let e) = try decode(json) else { return XCTFail() }
@@ -139,6 +164,10 @@ final class MoreSnapshotRecordTests: XCTestCase {
              { $0.eapols.count }),
             (#"{"type":"scan_entry","ts":1,"ip":"i"}"#,
              { $0.scans.count }),
+            (#"{"type":"wifi_ap","ts":1,"bssid":"b"}"#,
+             { $0.wifiAPs.count }),
+            (#"{"type":"wifi_sta","ts":1,"mac":"m"}"#,
+             { $0.wifiSTAs.count }),
         ]
         for (json, reader) in cases {
             store.ingest(try JSONDecoder().decode(SlothRecord.self, from: Data(json.utf8)))

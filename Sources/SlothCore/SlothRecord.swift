@@ -46,6 +46,8 @@ public enum SlothRecord: Sendable, Equatable {
     case eapol(EAPOLEntry)
     case scanEntry(ScanEntry)
     case packet(PacketEntry)
+    case wifiAP(WiFiAPEntry)
+    case wifiSTA(WiFiSTAEntry)
     case unknown(type: String, ts: Int)
 
     public var ts: Int {
@@ -79,6 +81,8 @@ public enum SlothRecord: Sendable, Equatable {
         case .eapol      (let e): return e.ts
         case .scanEntry  (let e): return e.ts
         case .packet     (let e): return e.ts
+        case .wifiAP     (let e): return e.ts
+        case .wifiSTA    (let e): return e.ts
         case .unknown(_, let ts): return ts
         }
     }
@@ -114,6 +118,8 @@ public enum SlothRecord: Sendable, Equatable {
         case .eapol:       return "eapol"
         case .scanEntry:   return "scan_entry"
         case .packet:      return "packet"
+        case .wifiAP:      return "wifi_ap"
+        case .wifiSTA:     return "wifi_sta"
         case .unknown(let t, _): return t
         }
     }
@@ -161,6 +167,8 @@ extension SlothRecord: Decodable {
         case "eapol":       self = .eapol      (try EAPOLEntry      (from: decoder))
         case "scan_entry":  self = .scanEntry  (try ScanEntry       (from: decoder))
         case "packet":      self = .packet     (try PacketEntry     (from: decoder))
+        case "wifi_ap":     self = .wifiAP     (try WiFiAPEntry     (from: decoder))
+        case "wifi_sta":    self = .wifiSTA    (try WiFiSTAEntry    (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             self = .unknown(type: tag, ts: ts)
@@ -200,6 +208,8 @@ extension SlothRecord: Encodable {
         case .eapol      (let e): try e.encode(to: encoder)
         case .scanEntry  (let e): try e.encode(to: encoder)
         case .packet     (let e): try e.encode(to: encoder)
+        case .wifiAP     (let e): try e.encode(to: encoder)
+        case .wifiSTA    (let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
@@ -1788,5 +1798,125 @@ public struct PacketEntry: Sendable, Codable, Equatable {
         try c.encodeIfPresent(proto,   forKey: .proto)
         try c.encode(len, forKey: .len)
         try c.encodeIfPresent(info, forKey: .info)
+    }
+}
+
+/// `wifi_ap` — sloth's active-scan view of currently-connectable APs.
+/// Distinct from `beacon` (which is the passive, history-rich
+/// beacon-frame observation): wifi_ap is the small "what's on the
+/// air right now and what's our relationship to it" table. `status`
+/// is the per-AP state string sloth's scanner emits
+/// (e.g. `CONNECTED`, `AVAILABLE`, `DISABLED`).
+public struct WiFiAPEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "wifi_ap" }
+    public let ts: Int
+    public let bssid: String
+    public let ssid: String?
+    public let signalDBM: Int?
+    public let channel: Int?
+    public let enc: String?
+    public let status: String?
+
+    public var id: String { bssid }
+
+    /// `true` when sloth's scanner reports this AP as the one the
+    /// observing host is currently associated with. The exact string
+    /// is sloth-side; we treat any value containing "CONNECT" as
+    /// connected so a producer rename ("CONNECTED" → "ASSOCIATED")
+    /// doesn't silently break the indicator.
+    public var isConnected: Bool {
+        guard let s = status?.uppercased() else { return false }
+        return s.contains("CONNECT") || s.contains("ASSOC")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, bssid, ssid, channel, enc, status
+        case signalDBM = "signal_dbm"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts        = try c.decode(Int.self,    forKey: .ts)
+        self.bssid     = try c.decode(String.self, forKey: .bssid)
+        self.ssid      = try c.decodeIfPresent(String.self, forKey: .ssid)
+        self.signalDBM = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
+        self.channel   = try c.decodeIfPresent(Int.self,    forKey: .channel)
+        self.enc       = try c.decodeIfPresent(String.self, forKey: .enc)
+        self.status    = try c.decodeIfPresent(String.self, forKey: .status)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,  forKey: .type)
+        try c.encode(ts,    forKey: .ts)
+        try c.encode(bssid, forKey: .bssid)
+        try c.encodeIfPresent(ssid,      forKey: .ssid)
+        try c.encodeIfPresent(signalDBM, forKey: .signalDBM)
+        try c.encodeIfPresent(channel,   forKey: .channel)
+        try c.encodeIfPresent(enc,       forKey: .enc)
+        try c.encodeIfPresent(status,    forKey: .status)
+    }
+}
+
+/// `wifi_sta` — sloth's per-station table from active WiFi
+/// interrogation. The only place on the wire that carries real
+/// kernel-derived throughput and idle time for an associated client
+/// (everything else either approximates from frame counts or is per-
+/// flow). `connected_secs` and `inactive_ms` come straight from
+/// `iw dev … station dump` on the producer side.
+public struct WiFiSTAEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "wifi_sta" }
+    public let ts: Int
+    public let mac: String
+    public let signalDBM: Int?
+    public let txRateKbps: Int
+    public let rxRateKbps: Int
+    public let connectedSecs: Int
+    public let inactiveMS: Int
+    public let txBytes: Int
+    public let rxBytes: Int
+
+    public var id: String { mac }
+
+    /// Combined link rate in kbps — primary sort key. Real station
+    /// throughput, not records-per-minute.
+    public var totalKbps: Int { txRateKbps + rxRateKbps }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, mac
+        case signalDBM     = "signal_dbm"
+        case txRateKbps    = "tx_rate_kbps"
+        case rxRateKbps    = "rx_rate_kbps"
+        case connectedSecs = "connected_secs"
+        case inactiveMS    = "inactive_ms"
+        case txBytes       = "tx_bytes"
+        case rxBytes       = "rx_bytes"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts             = try c.decode(Int.self,    forKey: .ts)
+        self.mac            = try c.decode(String.self, forKey: .mac)
+        self.signalDBM      = try c.decodeIfPresent(Int.self, forKey: .signalDBM)
+        self.txRateKbps     = try c.decodeIfPresent(Int.self, forKey: .txRateKbps)    ?? 0
+        self.rxRateKbps     = try c.decodeIfPresent(Int.self, forKey: .rxRateKbps)    ?? 0
+        self.connectedSecs  = try c.decodeIfPresent(Int.self, forKey: .connectedSecs) ?? 0
+        self.inactiveMS     = try c.decodeIfPresent(Int.self, forKey: .inactiveMS)    ?? 0
+        self.txBytes        = try c.decodeIfPresent(Int.self, forKey: .txBytes)       ?? 0
+        self.rxBytes        = try c.decodeIfPresent(Int.self, forKey: .rxBytes)       ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(mac,  forKey: .mac)
+        try c.encodeIfPresent(signalDBM, forKey: .signalDBM)
+        try c.encode(txRateKbps,    forKey: .txRateKbps)
+        try c.encode(rxRateKbps,    forKey: .rxRateKbps)
+        try c.encode(connectedSecs, forKey: .connectedSecs)
+        try c.encode(inactiveMS,    forKey: .inactiveMS)
+        try c.encode(txBytes,       forKey: .txBytes)
+        try c.encode(rxBytes,       forKey: .rxBytes)
     }
 }

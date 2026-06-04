@@ -34,6 +34,18 @@ public enum SlothRecord: Sendable, Equatable {
     case deauth(DeauthEntry)
     case mdnsService(MDNSServiceEntry)
     case dhcpLease(DHCPLeaseEntry)
+    case arp(ARPEntry)
+    case ssdpDevice(SSDPDeviceEntry)
+    case nbnsName(NBNSNameEntry)
+    case probeClient(ProbeClientEntry)
+    case pnlClient(PNLClientEntry)
+    case seqnumClient(SeqnumClientEntry)
+    case seqnumCorrelation(SeqnumCorrelationEntry)
+    case channelSummary(ChannelSummaryEntry)
+    case assoc(AssocEntry)
+    case eapol(EAPOLEntry)
+    case scanEntry(ScanEntry)
+    case packet(PacketEntry)
     case unknown(type: String, ts: Int)
 
     public var ts: Int {
@@ -55,6 +67,18 @@ public enum SlothRecord: Sendable, Equatable {
         case .deauth     (let e): return e.ts
         case .mdnsService(let e): return e.ts
         case .dhcpLease  (let e): return e.ts
+        case .arp        (let e): return e.ts
+        case .ssdpDevice (let e): return e.ts
+        case .nbnsName   (let e): return e.ts
+        case .probeClient(let e): return e.ts
+        case .pnlClient  (let e): return e.ts
+        case .seqnumClient     (let e): return e.ts
+        case .seqnumCorrelation(let e): return e.ts
+        case .channelSummary   (let e): return e.ts
+        case .assoc      (let e): return e.ts
+        case .eapol      (let e): return e.ts
+        case .scanEntry  (let e): return e.ts
+        case .packet     (let e): return e.ts
         case .unknown(_, let ts): return ts
         }
     }
@@ -78,6 +102,18 @@ public enum SlothRecord: Sendable, Equatable {
         case .deauth:      return "deauth"
         case .mdnsService: return "mdns_service"
         case .dhcpLease:   return "dhcp_lease"
+        case .arp:         return "arp"
+        case .ssdpDevice:  return "ssdp_device"
+        case .nbnsName:    return "nbns_name"
+        case .probeClient: return "probe_client"
+        case .pnlClient:   return "pnl_client"
+        case .seqnumClient:     return "seqnum_client"
+        case .seqnumCorrelation:return "seqnum_correlation"
+        case .channelSummary:   return "channel_summary"
+        case .assoc:       return "assoc"
+        case .eapol:       return "eapol"
+        case .scanEntry:   return "scan_entry"
+        case .packet:      return "packet"
         case .unknown(let t, _): return t
         }
     }
@@ -113,6 +149,18 @@ extension SlothRecord: Decodable {
         case "deauth":      self = .deauth     (try DeauthEntry     (from: decoder))
         case "mdns_service":self = .mdnsService(try MDNSServiceEntry(from: decoder))
         case "dhcp_lease":  self = .dhcpLease  (try DHCPLeaseEntry  (from: decoder))
+        case "arp":         self = .arp        (try ARPEntry        (from: decoder))
+        case "ssdp_device": self = .ssdpDevice (try SSDPDeviceEntry (from: decoder))
+        case "nbns_name":   self = .nbnsName   (try NBNSNameEntry   (from: decoder))
+        case "probe_client":self = .probeClient(try ProbeClientEntry(from: decoder))
+        case "pnl_client":  self = .pnlClient  (try PNLClientEntry  (from: decoder))
+        case "seqnum_client":      self = .seqnumClient     (try SeqnumClientEntry     (from: decoder))
+        case "seqnum_correlation": self = .seqnumCorrelation(try SeqnumCorrelationEntry(from: decoder))
+        case "channel_summary":    self = .channelSummary   (try ChannelSummaryEntry   (from: decoder))
+        case "assoc":       self = .assoc      (try AssocEntry      (from: decoder))
+        case "eapol":       self = .eapol      (try EAPOLEntry      (from: decoder))
+        case "scan_entry":  self = .scanEntry  (try ScanEntry       (from: decoder))
+        case "packet":      self = .packet     (try PacketEntry     (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             self = .unknown(type: tag, ts: ts)
@@ -140,6 +188,18 @@ extension SlothRecord: Encodable {
         case .deauth     (let e): try e.encode(to: encoder)
         case .mdnsService(let e): try e.encode(to: encoder)
         case .dhcpLease  (let e): try e.encode(to: encoder)
+        case .arp        (let e): try e.encode(to: encoder)
+        case .ssdpDevice (let e): try e.encode(to: encoder)
+        case .nbnsName   (let e): try e.encode(to: encoder)
+        case .probeClient(let e): try e.encode(to: encoder)
+        case .pnlClient  (let e): try e.encode(to: encoder)
+        case .seqnumClient     (let e): try e.encode(to: encoder)
+        case .seqnumCorrelation(let e): try e.encode(to: encoder)
+        case .channelSummary   (let e): try e.encode(to: encoder)
+        case .assoc      (let e): try e.encode(to: encoder)
+        case .eapol      (let e): try e.encode(to: encoder)
+        case .scanEntry  (let e): try e.encode(to: encoder)
+        case .packet     (let e): try e.encode(to: encoder)
         case .unknown(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
@@ -1130,5 +1190,603 @@ public struct DHCPLeaseEntry: Sendable, Codable, Equatable, Identifiable {
         try c.encode(ip,   forKey: .ip)
         try c.encodeIfPresent(hostname, forKey: .hostname)
         try c.encode(expire, forKey: .expire)
+    }
+}
+
+// MARK: - LAN snapshot records
+
+/// `arp` — one entry per (mac, ip) seen in ARP frames sloth has
+/// observed. `iface` is the local network interface the frame
+/// arrived on.
+public struct ARPEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "arp" }
+    public let ts: Int
+    public let mac: String
+    public let ip: String
+    public let iface: String?
+
+    public var id: String { "\(mac)|\(ip)" }
+
+    enum CodingKeys: String, CodingKey { case type, ts, mac, ip, iface }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts    = try c.decode(Int.self,    forKey: .ts)
+        self.mac   = try c.decode(String.self, forKey: .mac)
+        self.ip    = try c.decode(String.self, forKey: .ip)
+        self.iface = try c.decodeIfPresent(String.self, forKey: .iface)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(mac,  forKey: .mac)
+        try c.encode(ip,   forKey: .ip)
+        try c.encodeIfPresent(iface, forKey: .iface)
+    }
+}
+
+/// `ssdp_device` — one entry per SSDP / UPnP device sloth has seen.
+/// `kind` is the SSDP `NT` / `ST` value (renamed from `type` on the
+/// wire to avoid colliding with the envelope's `type` field).
+public struct SSDPDeviceEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "ssdp_device" }
+    public let ts: Int
+    public let usn: String
+    public let ip: String?
+    public let kind: String?
+    public let location: String?
+    public let nts: String?
+    public let lastSeen: Int
+
+    public var id: String { usn }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, usn, ip, kind, location, nts
+        case lastSeen = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts       = try c.decode(Int.self,    forKey: .ts)
+        self.usn      = try c.decode(String.self, forKey: .usn)
+        self.ip       = try c.decodeIfPresent(String.self, forKey: .ip)
+        self.kind     = try c.decodeIfPresent(String.self, forKey: .kind)
+        self.location = try c.decodeIfPresent(String.self, forKey: .location)
+        self.nts      = try c.decodeIfPresent(String.self, forKey: .nts)
+        self.lastSeen = try c.decodeIfPresent(Int.self,    forKey: .lastSeen) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(usn,  forKey: .usn)
+        try c.encodeIfPresent(ip,       forKey: .ip)
+        try c.encodeIfPresent(kind,     forKey: .kind)
+        try c.encodeIfPresent(location, forKey: .location)
+        try c.encodeIfPresent(nts,      forKey: .nts)
+        try c.encode(lastSeen, forKey: .lastSeen)
+    }
+}
+
+/// `nbns_name` — NetBIOS name announcement (Windows hosts).
+public struct NBNSNameEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "nbns_name" }
+    public let ts: Int
+    public let name: String
+    public let ip: String
+    public let suffix: String?
+    public let lastSeen: Int
+
+    public var id: String { "\(name)|\(ip)" }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, name, ip, suffix
+        case lastSeen = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts       = try c.decode(Int.self,    forKey: .ts)
+        self.name     = try c.decode(String.self, forKey: .name)
+        self.ip       = try c.decode(String.self, forKey: .ip)
+        self.suffix   = try c.decodeIfPresent(String.self, forKey: .suffix)
+        self.lastSeen = try c.decodeIfPresent(Int.self,    forKey: .lastSeen) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(name, forKey: .name)
+        try c.encode(ip,   forKey: .ip)
+        try c.encodeIfPresent(suffix, forKey: .suffix)
+        try c.encode(lastSeen, forKey: .lastSeen)
+    }
+}
+
+// MARK: - WiFi-client snapshot records
+
+/// `probe_client` — one 802.11 probe-requesting station per MAC sloth
+/// has seen. `ssid` is the most-recent SSID the station probed for
+/// (empty / `(any)` for wildcard / broadcast probes).
+public struct ProbeClientEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "probe_client" }
+    public let ts: Int
+    public let mac: String
+    public let ssid: String?
+    public let signalDBM: Int?
+    public let channel: Int?
+    public let firstSeen: Int
+    public let lastSeen: Int
+    public let frameCount: Int
+
+    public var id: String { mac }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, mac, ssid, channel
+        case signalDBM  = "signal_dbm"
+        case firstSeen  = "first_seen"
+        case lastSeen   = "last_seen"
+        case frameCount = "frame_count"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self,    forKey: .ts)
+        self.mac        = try c.decode(String.self, forKey: .mac)
+        self.ssid       = try c.decodeIfPresent(String.self, forKey: .ssid)
+        self.signalDBM  = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
+        self.channel    = try c.decodeIfPresent(Int.self,    forKey: .channel)
+        self.firstSeen  = try c.decodeIfPresent(Int.self,    forKey: .firstSeen)  ?? 0
+        self.lastSeen   = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)   ?? 0
+        self.frameCount = try c.decodeIfPresent(Int.self,    forKey: .frameCount) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(mac,  forKey: .mac)
+        try c.encodeIfPresent(ssid,      forKey: .ssid)
+        try c.encodeIfPresent(signalDBM, forKey: .signalDBM)
+        try c.encodeIfPresent(channel,   forKey: .channel)
+        try c.encode(firstSeen,  forKey: .firstSeen)
+        try c.encode(lastSeen,   forKey: .lastSeen)
+        try c.encode(frameCount, forKey: .frameCount)
+    }
+}
+
+/// `pnl_client` — Preferred Network List record per probing station.
+/// `ssids[]` is the cumulative set of SSIDs sloth has seen this MAC
+/// probe for; `mac_random = 1` flags locally-administered (likely
+/// randomised) MACs that won't survive a roam.
+public struct PNLClientEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "pnl_client" }
+    public let ts: Int
+    public let mac: String
+    public let macRandom: Int
+    public let probeCount: Int
+    public let osFP: String?
+    public let phy: String?
+    public let firstSeen: Int
+    public let lastSeen: Int
+    public let ssids: [String]
+
+    public var id: String { mac }
+
+    /// Whether sloth flagged the MAC as locally-administered.
+    public var isRandomMAC: Bool { macRandom != 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, mac, phy, ssids
+        case macRandom  = "mac_random"
+        case probeCount = "probe_count"
+        case osFP       = "os_fp"
+        case firstSeen  = "first_seen"
+        case lastSeen   = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self,    forKey: .ts)
+        self.mac        = try c.decode(String.self, forKey: .mac)
+        self.macRandom  = try c.decodeIfPresent(Int.self,       forKey: .macRandom)  ?? 0
+        self.probeCount = try c.decodeIfPresent(Int.self,       forKey: .probeCount) ?? 0
+        self.osFP       = try c.decodeIfPresent(String.self,    forKey: .osFP)
+        self.phy        = try c.decodeIfPresent(String.self,    forKey: .phy)
+        self.firstSeen  = try c.decodeIfPresent(Int.self,       forKey: .firstSeen)  ?? 0
+        self.lastSeen   = try c.decodeIfPresent(Int.self,       forKey: .lastSeen)   ?? 0
+        self.ssids      = try c.decodeIfPresent([String].self,  forKey: .ssids)      ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(mac,  forKey: .mac)
+        try c.encode(macRandom,  forKey: .macRandom)
+        try c.encode(probeCount, forKey: .probeCount)
+        try c.encodeIfPresent(osFP, forKey: .osFP)
+        try c.encodeIfPresent(phy,  forKey: .phy)
+        try c.encode(firstSeen, forKey: .firstSeen)
+        try c.encode(lastSeen,  forKey: .lastSeen)
+        try c.encode(ssids,     forKey: .ssids)
+    }
+}
+
+/// `seqnum_client` — 12-bit 802.11 sequence-number history sloth
+/// observed per MAC. Used to detect MAC-randomisation defeat (a real
+/// device's seqnum advances monotonically across MAC changes).
+public struct SeqnumClientEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "seqnum_client" }
+    public let ts: Int
+    public let mac: String
+    public let macRandom: Int
+    public let lastSeen: Int
+    public let frameCount: Int
+    public let hist: [Int]
+
+    public var id: String { mac }
+
+    public var isRandomMAC: Bool { macRandom != 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, mac, hist
+        case macRandom  = "mac_random"
+        case lastSeen   = "last_seen"
+        case frameCount = "frame_count"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self,    forKey: .ts)
+        self.mac        = try c.decode(String.self, forKey: .mac)
+        self.macRandom  = try c.decodeIfPresent(Int.self,    forKey: .macRandom)  ?? 0
+        self.lastSeen   = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)   ?? 0
+        self.frameCount = try c.decodeIfPresent(Int.self,    forKey: .frameCount) ?? 0
+        self.hist       = try c.decodeIfPresent([Int].self,  forKey: .hist)       ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(mac,  forKey: .mac)
+        try c.encode(macRandom,  forKey: .macRandom)
+        try c.encode(lastSeen,   forKey: .lastSeen)
+        try c.encode(frameCount, forKey: .frameCount)
+        try c.encode(hist,       forKey: .hist)
+    }
+}
+
+/// `seqnum_correlation` — sloth's detector for the case where two
+/// MACs are likely the same physical NIC (seqnums interleave with a
+/// small gap and short dt). `gap` is the seqnum delta; `dt_ms` is
+/// the wall-clock delta in milliseconds.
+public struct SeqnumCorrelationEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "seqnum_correlation" }
+    public let ts: Int
+    public let macA: String
+    public let macB: String
+    public let macARandom: Int
+    public let macBRandom: Int
+    public let gap: Int
+    public let dtMS: Int
+    public let aCount: Int
+    public let bCount: Int
+
+    public var id: String { "\(macA)|\(macB)" }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, gap
+        case macA       = "mac_a"
+        case macB       = "mac_b"
+        case macARandom = "mac_a_random"
+        case macBRandom = "mac_b_random"
+        case dtMS       = "dt_ms"
+        case aCount     = "a_count"
+        case bCount     = "b_count"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self,    forKey: .ts)
+        self.macA       = try c.decode(String.self, forKey: .macA)
+        self.macB       = try c.decode(String.self, forKey: .macB)
+        self.macARandom = try c.decodeIfPresent(Int.self, forKey: .macARandom) ?? 0
+        self.macBRandom = try c.decodeIfPresent(Int.self, forKey: .macBRandom) ?? 0
+        self.gap        = try c.decodeIfPresent(Int.self, forKey: .gap)        ?? 0
+        self.dtMS       = try c.decodeIfPresent(Int.self, forKey: .dtMS)       ?? 0
+        self.aCount     = try c.decodeIfPresent(Int.self, forKey: .aCount)     ?? 0
+        self.bCount     = try c.decodeIfPresent(Int.self, forKey: .bCount)     ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(macA, forKey: .macA)
+        try c.encode(macB, forKey: .macB)
+        try c.encode(macARandom, forKey: .macARandom)
+        try c.encode(macBRandom, forKey: .macBRandom)
+        try c.encode(gap,    forKey: .gap)
+        try c.encode(dtMS,   forKey: .dtMS)
+        try c.encode(aCount, forKey: .aCount)
+        try c.encode(bCount, forKey: .bCount)
+    }
+}
+
+/// `channel_summary` — per-WiFi-channel roll-up.
+public struct ChannelSummaryEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "channel_summary" }
+    public let ts: Int
+    public let channel: Int
+    public let apCount: Int
+    public let assocCount: Int
+    public let bestSignal: Int?
+    public let topSSID: String?
+    public let lastSeen: Int
+
+    public var id: Int { channel }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, channel
+        case apCount    = "ap_count"
+        case assocCount = "assoc_count"
+        case bestSignal = "best_signal"
+        case topSSID    = "top_ssid"
+        case lastSeen   = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self, forKey: .ts)
+        self.channel    = try c.decode(Int.self, forKey: .channel)
+        self.apCount    = try c.decodeIfPresent(Int.self,    forKey: .apCount)    ?? 0
+        self.assocCount = try c.decodeIfPresent(Int.self,    forKey: .assocCount) ?? 0
+        self.bestSignal = try c.decodeIfPresent(Int.self,    forKey: .bestSignal)
+        self.topSSID    = try c.decodeIfPresent(String.self, forKey: .topSSID)
+        self.lastSeen   = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)   ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,    forKey: .type)
+        try c.encode(ts,      forKey: .ts)
+        try c.encode(channel, forKey: .channel)
+        try c.encode(apCount,    forKey: .apCount)
+        try c.encode(assocCount, forKey: .assocCount)
+        try c.encodeIfPresent(bestSignal, forKey: .bestSignal)
+        try c.encodeIfPresent(topSSID,    forKey: .topSSID)
+        try c.encode(lastSeen, forKey: .lastSeen)
+    }
+}
+
+/// `assoc` — WiFi station-to-AP association observation.
+public struct AssocEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "assoc" }
+    public let ts: Int
+    public let bssid: String
+    public let staMAC: String
+    public let ssid: String?
+    public let staRandom: Int
+    public let source: String?
+    public let channel: Int?
+    public let signalDBM: Int?
+    public let firstSeen: Int
+    public let lastSeen: Int
+    public let frameCount: Int
+
+    public var id: String { "\(bssid)|\(staMAC)" }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, bssid, ssid, source, channel
+        case staMAC     = "sta_mac"
+        case staRandom  = "sta_random"
+        case signalDBM  = "signal_dbm"
+        case firstSeen  = "first_seen"
+        case lastSeen   = "last_seen"
+        case frameCount = "frame_count"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts         = try c.decode(Int.self,    forKey: .ts)
+        self.bssid      = try c.decode(String.self, forKey: .bssid)
+        self.staMAC     = try c.decode(String.self, forKey: .staMAC)
+        self.ssid       = try c.decodeIfPresent(String.self, forKey: .ssid)
+        self.staRandom  = try c.decodeIfPresent(Int.self,    forKey: .staRandom)  ?? 0
+        self.source     = try c.decodeIfPresent(String.self, forKey: .source)
+        self.channel    = try c.decodeIfPresent(Int.self,    forKey: .channel)
+        self.signalDBM  = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
+        self.firstSeen  = try c.decodeIfPresent(Int.self,    forKey: .firstSeen)  ?? 0
+        self.lastSeen   = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)   ?? 0
+        self.frameCount = try c.decodeIfPresent(Int.self,    forKey: .frameCount) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,   forKey: .type)
+        try c.encode(ts,     forKey: .ts)
+        try c.encode(bssid,  forKey: .bssid)
+        try c.encode(staMAC, forKey: .staMAC)
+        try c.encodeIfPresent(ssid,      forKey: .ssid)
+        try c.encode(staRandom,  forKey: .staRandom)
+        try c.encodeIfPresent(source,    forKey: .source)
+        try c.encodeIfPresent(channel,   forKey: .channel)
+        try c.encodeIfPresent(signalDBM, forKey: .signalDBM)
+        try c.encode(firstSeen,  forKey: .firstSeen)
+        try c.encode(lastSeen,   forKey: .lastSeen)
+        try c.encode(frameCount, forKey: .frameCount)
+    }
+}
+
+/// `eapol` — WPA 4-way handshake observation. `handshake_complete = 1`
+/// means sloth saw all four messages for this (bssid, sta_mac) pair —
+/// the strongest signal for an "attack-capable" capture of this
+/// session.
+public struct EAPOLEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "eapol" }
+    public let ts: Int
+    public let bssid: String
+    public let staMAC: String
+    public let ssid: String?
+    public let eventTS: Int
+    public let msgNum: Int
+    public let hasPMKID: Int
+    public let handshakeComplete: Int
+    public let signalDBM: Int?
+    public let channel: Int?
+
+    public var id: String { "\(bssid)|\(staMAC)" }
+
+    public var isComplete: Bool { handshakeComplete != 0 }
+    public var hasPMKIDFlag: Bool { hasPMKID != 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, bssid, ssid, channel
+        case staMAC            = "sta_mac"
+        case eventTS           = "event_ts"
+        case msgNum            = "msg_num"
+        case hasPMKID          = "has_pmkid"
+        case handshakeComplete = "handshake_complete"
+        case signalDBM         = "signal_dbm"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts                = try c.decode(Int.self,    forKey: .ts)
+        self.bssid             = try c.decode(String.self, forKey: .bssid)
+        self.staMAC            = try c.decode(String.self, forKey: .staMAC)
+        self.ssid              = try c.decodeIfPresent(String.self, forKey: .ssid)
+        self.eventTS           = try c.decodeIfPresent(Int.self,    forKey: .eventTS) ?? 0
+        self.msgNum            = try c.decodeIfPresent(Int.self,    forKey: .msgNum)  ?? 0
+        self.hasPMKID          = try c.decodeIfPresent(Int.self,    forKey: .hasPMKID) ?? 0
+        self.handshakeComplete = try c.decodeIfPresent(Int.self,    forKey: .handshakeComplete) ?? 0
+        self.signalDBM         = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
+        self.channel           = try c.decodeIfPresent(Int.self,    forKey: .channel)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,   forKey: .type)
+        try c.encode(ts,     forKey: .ts)
+        try c.encode(bssid,  forKey: .bssid)
+        try c.encode(staMAC, forKey: .staMAC)
+        try c.encodeIfPresent(ssid, forKey: .ssid)
+        try c.encode(eventTS, forKey: .eventTS)
+        try c.encode(msgNum,  forKey: .msgNum)
+        try c.encode(hasPMKID, forKey: .hasPMKID)
+        try c.encode(handshakeComplete, forKey: .handshakeComplete)
+        try c.encodeIfPresent(signalDBM, forKey: .signalDBM)
+        try c.encodeIfPresent(channel,   forKey: .channel)
+    }
+}
+
+/// `scan_entry` — sloth's port-scan detector. One record per IP that
+/// has hit `port_count` distinct ports. `flagged = 1` means the IP
+/// crossed sloth's detector threshold; `ports[]` is the observed set
+/// (capped on the producer side).
+public struct ScanEntry: Sendable, Codable, Equatable, Identifiable {
+    public var type: String { "scan_entry" }
+    public let ts: Int
+    public let ip: String
+    public let portCount: Int
+    public let firstSeen: Int
+    public let lastSeen: Int
+    public let flagged: Int
+    public let ports: [Int]
+
+    public var id: String { ip }
+
+    public var isFlagged: Bool { flagged != 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, ip, flagged, ports
+        case portCount = "port_count"
+        case firstSeen = "first_seen"
+        case lastSeen  = "last_seen"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts        = try c.decode(Int.self,    forKey: .ts)
+        self.ip        = try c.decode(String.self, forKey: .ip)
+        self.portCount = try c.decodeIfPresent(Int.self,    forKey: .portCount) ?? 0
+        self.firstSeen = try c.decodeIfPresent(Int.self,    forKey: .firstSeen) ?? 0
+        self.lastSeen  = try c.decodeIfPresent(Int.self,    forKey: .lastSeen)  ?? 0
+        self.flagged   = try c.decodeIfPresent(Int.self,    forKey: .flagged)   ?? 0
+        self.ports     = try c.decodeIfPresent([Int].self,  forKey: .ports)     ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type, forKey: .type)
+        try c.encode(ts,   forKey: .ts)
+        try c.encode(ip,   forKey: .ip)
+        try c.encode(portCount, forKey: .portCount)
+        try c.encode(firstSeen, forKey: .firstSeen)
+        try c.encode(lastSeen,  forKey: .lastSeen)
+        try c.encode(flagged,   forKey: .flagged)
+        try c.encode(ports,     forKey: .ports)
+    }
+}
+
+/// `packet` — live packet header (no payload — raw frame bytes are
+/// intentionally not emitted). Treated as an event stream on the
+/// consumer side, not a snapshot table: sloth's natural-identity
+/// tuple `(ts_sec, ts_usec, src, dst)` is essentially unique per
+/// packet, so the iOS store keeps the most-recent N in a ring.
+public struct PacketEntry: Sendable, Codable, Equatable {
+    public var type: String { "packet" }
+    public let ts: Int
+    public let tsSec: Int
+    public let tsUSec: Int
+    public let src: String
+    public let dst: String
+    public let srcPort: Int?
+    public let dstPort: Int?
+    public let proto: String?
+    public let len: Int
+    public let info: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, src, dst, proto, len, info
+        case tsSec   = "ts_sec"
+        case tsUSec  = "ts_usec"
+        case srcPort = "src_port"
+        case dstPort = "dst_port"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ts      = try c.decode(Int.self,    forKey: .ts)
+        self.tsSec   = try c.decodeIfPresent(Int.self,    forKey: .tsSec)   ?? 0
+        self.tsUSec  = try c.decodeIfPresent(Int.self,    forKey: .tsUSec)  ?? 0
+        self.src     = try c.decode(String.self, forKey: .src)
+        self.dst     = try c.decode(String.self, forKey: .dst)
+        self.srcPort = try c.decodeIfPresent(Int.self,    forKey: .srcPort)
+        self.dstPort = try c.decodeIfPresent(Int.self,    forKey: .dstPort)
+        self.proto   = try c.decodeIfPresent(String.self, forKey: .proto)
+        self.len     = try c.decodeIfPresent(Int.self,    forKey: .len)     ?? 0
+        self.info    = try c.decodeIfPresent(String.self, forKey: .info)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(type,  forKey: .type)
+        try c.encode(ts,    forKey: .ts)
+        try c.encode(tsSec, forKey: .tsSec)
+        try c.encode(tsUSec, forKey: .tsUSec)
+        try c.encode(src,   forKey: .src)
+        try c.encode(dst,   forKey: .dst)
+        try c.encodeIfPresent(srcPort, forKey: .srcPort)
+        try c.encodeIfPresent(dstPort, forKey: .dstPort)
+        try c.encodeIfPresent(proto,   forKey: .proto)
+        try c.encode(len, forKey: .len)
+        try c.encodeIfPresent(info, forKey: .info)
     }
 }

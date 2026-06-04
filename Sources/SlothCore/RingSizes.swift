@@ -32,6 +32,11 @@ public struct RingSizes: Sendable, Equatable {
     /// cadence as iface (1 sample/sec); 120 samples ≈ 2 minutes —
     /// matches what the operator can fit at a glance on a phone.
     public let topHostSamples: Int
+    /// Cap on the `packet` event ring. Sloth's packet stream is high-
+    /// volume; 1024 is roughly what the live PacketsView can paint
+    /// without dropping frames in the SwiftUI list, and matches the
+    /// per-protocol log rings.
+    public let packets: Int
 
     public init(
         dns:    Int = 1024,
@@ -43,7 +48,8 @@ public struct RingSizes: Sendable, Equatable {
         alerts: Int = 128,
         connections:    Int = 2048,
         ifaceSamples:   Int = 60,
-        topHostSamples: Int = 120
+        topHostSamples: Int = 120,
+        packets:        Int = 1024
     ) {
         self.dns    = dns
         self.tls    = tls
@@ -55,6 +61,7 @@ public struct RingSizes: Sendable, Equatable {
         self.connections    = connections
         self.ifaceSamples   = ifaceSamples
         self.topHostSamples = topHostSamples
+        self.packets        = packets
     }
 
     /// The defaults sloth-ios ships with. Mirrors sloth's TUI caps

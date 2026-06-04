@@ -72,6 +72,35 @@ public final class SlothStore {
     public private(set) var mdnsServices: [String: MDNSServiceEntry]  = [:]
     /// `dhcp_lease` snapshot table — keyed by IP.
     public private(set) var dhcpLeases: [String: DHCPLeaseEntry]      = [:]
+    /// `arp` snapshot table — keyed by (mac, ip).
+    public private(set) var arpEntries: [String: ARPEntry]            = [:]
+    /// `ssdp_device` snapshot table — keyed by USN.
+    public private(set) var ssdpDevices: [String: SSDPDeviceEntry]    = [:]
+    /// `nbns_name` snapshot table — keyed by (name, ip).
+    public private(set) var nbnsNames: [String: NBNSNameEntry]        = [:]
+    /// `probe_client` snapshot table — keyed by MAC.
+    public private(set) var probeClients: [String: ProbeClientEntry]  = [:]
+    /// `pnl_client` snapshot table — keyed by MAC.
+    public private(set) var pnlClients: [String: PNLClientEntry]      = [:]
+    /// `seqnum_client` snapshot table — keyed by MAC.
+    public private(set) var seqnumClients: [String: SeqnumClientEntry] = [:]
+    /// `seqnum_correlation` snapshot table — keyed by (mac_a, mac_b).
+    public private(set) var seqnumCorrelations: [String: SeqnumCorrelationEntry] = [:]
+    /// `channel_summary` snapshot table — keyed by channel number.
+    public private(set) var channelSummaries: [Int: ChannelSummaryEntry] = [:]
+    /// `assoc` snapshot table — keyed by (bssid, sta_mac).
+    public private(set) var assocs: [String: AssocEntry]              = [:]
+    /// `eapol` snapshot table — keyed by (bssid, sta_mac). Sloth's
+    /// (bssid, sta_mac) tuple covers one PMKID/handshake exchange.
+    public private(set) var eapols: [String: EAPOLEntry]              = [:]
+    /// `scan_entry` snapshot table — keyed by IP.
+    public private(set) var scans: [String: ScanEntry]                = [:]
+
+    /// `packet` event ring. Unlike the snapshot tables, sloth's
+    /// `(ts_sec, ts_usec, src, dst)` natural identity is essentially
+    /// unique per packet, so the iOS store appends + caps like the
+    /// per-protocol log rings rather than replacing on key.
+    public private(set) var packets: [PacketEntry] = []
 
     /// Per-iface rate sample series — appended on each `iface` snapshot
     /// so InterfacesView can draw a 60-sample sparkline of rx + tx.
@@ -142,6 +171,18 @@ public final class SlothStore {
         case .deauth      (let e): deauths[e.id] = e
         case .mdnsService (let e): mdnsServices[e.instance] = e
         case .dhcpLease   (let e): dhcpLeases[e.ip] = e
+        case .arp         (let e): arpEntries[e.id] = e
+        case .ssdpDevice  (let e): ssdpDevices[e.usn] = e
+        case .nbnsName    (let e): nbnsNames[e.id] = e
+        case .probeClient (let e): probeClients[e.mac] = e
+        case .pnlClient   (let e): pnlClients[e.mac] = e
+        case .seqnumClient      (let e): seqnumClients[e.mac] = e
+        case .seqnumCorrelation (let e): seqnumCorrelations[e.id] = e
+        case .channelSummary    (let e): channelSummaries[e.channel] = e
+        case .assoc       (let e): assocs[e.id] = e
+        case .eapol       (let e): eapols[e.id] = e
+        case .scanEntry   (let e): scans[e.ip] = e
+        case .packet      (let e): append(e, into: \.packets, cap: sizes.packets)
         case .unknown:             unknownCount += 1
         }
         recordsReceived += 1
@@ -192,6 +233,18 @@ public final class SlothStore {
         deauths.removeAll()
         mdnsServices.removeAll()
         dhcpLeases.removeAll()
+        arpEntries.removeAll()
+        ssdpDevices.removeAll()
+        nbnsNames.removeAll()
+        probeClients.removeAll()
+        pnlClients.removeAll()
+        seqnumClients.removeAll()
+        seqnumCorrelations.removeAll()
+        channelSummaries.removeAll()
+        assocs.removeAll()
+        eapols.removeAll()
+        scans.removeAll()
+        packets.removeAll()
         ifaceRxSamples.removeAll()
         ifaceTxSamples.removeAll()
         topHostRxSamples.removeAll()

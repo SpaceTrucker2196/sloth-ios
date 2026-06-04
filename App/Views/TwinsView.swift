@@ -32,12 +32,13 @@ struct TwinsView: View {
     var body: some View {
         let twins   = sortedTwins(store.twinEpisodes.values)
         let deauths = sortedDeauths(store.deauths.values)
+        let scans   = sortedScans(store.scans.values)
         Group {
-            if twins.isEmpty && deauths.isEmpty {
+            if twins.isEmpty && deauths.isEmpty && scans.isEmpty {
                 ContentUnavailableView(
                     "Nothing to flag",
                     systemImage: "shield.checkered",
-                    description: Text("Sloth's evil-twin detector and deauth-flood tracker both report empty — the desired state.")
+                    description: Text("Sloth's evil-twin detector, deauth-flood tracker, and port-scan detector all report empty — the desired state.")
                 )
             } else {
                 List {
@@ -71,12 +72,33 @@ struct TwinsView: View {
                             .foregroundStyle(.secondary)
                             .textCase(nil)
                     }
+                    Section {
+                        if scans.isEmpty {
+                            quietRow("No port-scan hits")
+                        } else {
+                            ForEach(scans) { ScanRow(scan: $0) }
+                        }
+                    } header: {
+                        Label("Port scans (\(scans.count))",
+                              systemImage: "magnifyingglass.circle")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                    }
                 }
                 .listStyle(.plain)
             }
         }
-        .navigationTitle("Twins & deauth")
+        .navigationTitle("Threats")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func sortedScans(_ values: Dictionary<String, ScanEntry>.Values) -> [ScanEntry] {
+        values.sorted { lhs, rhs in
+            if lhs.isFlagged != rhs.isFlagged { return lhs.isFlagged && !rhs.isFlagged }
+            if lhs.portCount != rhs.portCount { return lhs.portCount > rhs.portCount }
+            return lhs.lastSeen > rhs.lastSeen
+        }
     }
 
     private func sortedTwins(_ values: Dictionary<String, TwinEpisodeEntry>.Values) -> [TwinEpisodeEntry] {
@@ -156,6 +178,42 @@ private struct DeauthRow: View {
             Text(value).foregroundStyle(.secondary)
         }
         .font(.caption2.monospaced())
+    }
+}
+
+private struct ScanRow: View {
+
+    let scan: ScanEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: scan.isFlagged
+                      ? "exclamationmark.octagon.fill"
+                      : "magnifyingglass.circle")
+                    .foregroundStyle(scan.isFlagged ? Color.alertHotCrit : .alertHotLow)
+                Text(scan.ip)
+                    .font(.callout.monospaced().weight(.semibold))
+                    .foregroundStyle(scan.isFlagged ? Color.alertHotCrit : .phosphorBright)
+                Spacer()
+                Text("\(scan.portCount) ports")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            if !scan.ports.isEmpty {
+                Text(portsSummary)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var portsSummary: String {
+        let head = scan.ports.prefix(12).map(String.init).joined(separator: " ")
+        let extra = scan.ports.count > 12 ? "  +\(scan.ports.count - 12)" : ""
+        return ":\(head)\(extra)"
     }
 }
 

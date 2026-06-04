@@ -111,7 +111,7 @@ struct ContentView: View {
             NavigationStack { ProcessesView() }
                 .tabItem { Label("Procs", systemImage: "cpu") }
 
-            NavigationStack { WiFiAPsView() }
+            NavigationStack { WiFiView() }
                 .tabItem { Label("WiFi", systemImage: "wifi") }
 
             NavigationStack { DevicesView() }
@@ -138,6 +138,9 @@ struct ContentView: View {
 
             NavigationStack { HTTPLogView() }
                 .tabItem { Label("HTTP", systemImage: "globe") }
+
+            NavigationStack { PacketsView() }
+                .tabItem { Label("Packets", systemImage: "rectangle.stack") }
         }
     }
 

@@ -162,7 +162,7 @@ Tailscale → sloth instance → this iOS app.
 
 ## Token / Cost Ledger (billing-grade)
 
-The owner bills clients from `LEDGER.md` at this repo's root. Entries must be **exact, not estimated**.
+The owner bills clients from `LEDGER.md` at this repo's root (created/updated by `~/.claude/billing/ledger.py`). Entries must be **exact, not estimated**.
 
 ### How to record a commit
 

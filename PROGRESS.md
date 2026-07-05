@@ -59,6 +59,34 @@ the commit hashes.
 
 ## Recently landed
 
+### 2026-07-04 — ICMPLogView (dashboard drill-in follow-up)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/ICMPClassify.swift` — type/code → display name
+  (mirrors sloth's `src/icmp_log.c` `desc_v4`/`desc_v6` exactly) +
+  coarse filter categories (echo / error / discovery / other).
+  Family is inferred from the address literal (`:` ⇒ v6) since the
+  wire subset carries no `is_v6`.
+- `Tests/SlothCoreTests/ICMPClassifyTests.swift` — 8 hermetic tests
+  incl. the discriminating type-3 case (v4 Unreachable vs v6 TTL
+  Exceeded). 193/193 total green.
+- `docs/views/icmp-log.md` — spec.
+- `App/Views/ICMPLogView.swift` — FilterBar (All/Echo/Errors/
+  Discovery + search) over the newest-first ring; error rows read
+  WARN orange without waiting for an alert; hot IPs in tier hue.
+- Wired: dashboard ICMP panel title now drills in (`DashboardRoute
+  .icmp`); iPhone gets an ICMP tab (More overflow).
+
+**Verification**: `swift test` 193/193; iPad + iPhone builds
+warning-clean; live board (fake producer) shows the ICMP panel
+with its drill chevron and counts. Drill-in *tap* uses the same
+NavigationLink mechanism as every other band; verified by
+inspection + compile, worth one manual tap when next on-device.
+
+**Why**: The ICMP panel was the only band on the Tufte board with
+no destination. Closes the first follow-up from the dashboard
+entry below.
+
 ### 2026-07-04 — iPad Tufte band dashboard (supersedes M7 tile grid)
 **Commits**: *(this entry lands with the commit)*
 **Touched**:

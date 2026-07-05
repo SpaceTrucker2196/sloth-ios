@@ -14,7 +14,7 @@ import SlothCore
 /// the TUI's Enter-on-focused-panel, minus the focus state.
 enum DashboardRoute: Hashable {
     case interfaces, alerts, connections, topHosts
-    case wifi, lan, twins, dns, packets
+    case wifi, lan, twins, dns, icmp, packets
 }
 
 /// Band header: SMALL-CAPS title · count, fused into a hairline rule.

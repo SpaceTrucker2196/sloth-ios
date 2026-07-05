@@ -295,7 +295,7 @@ struct ICMPLogPanel: View {
 
     var body: some View {
         let tail = DashboardRoster.logTail(store.icmp, limit: gridRowCap)
-        GridPanel(title: "ICMP", count: store.icmp.count,
+        GridPanel(title: "ICMP", count: store.icmp.count, route: .icmp,
                   quiet: "no icmp traffic", isEmpty: tail.isEmpty) {
             ForEach(Array(tail.enumerated()), id: \.offset) { _, e in
                 HStack(spacing: 6) {

@@ -73,6 +73,7 @@ struct DashboardView: View {
         case .lan:         LANView()
         case .twins:       TwinsView()
         case .dns:         DNSLogView()
+        case .icmp:        ICMPLogView()
         case .packets:     PacketsView()
         }
     }

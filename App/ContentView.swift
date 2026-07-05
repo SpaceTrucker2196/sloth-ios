@@ -148,6 +148,9 @@ struct ContentView: View {
             NavigationStack { HTTPLogView() }
                 .tabItem { Label("HTTP", systemImage: "globe") }
 
+            NavigationStack { ICMPLogView() }
+                .tabItem { Label("ICMP", systemImage: "arrow.left.arrow.right") }
+
             NavigationStack { PacketsView() }
                 .tabItem { Label("Packets", systemImage: "rectangle.stack") }
         }

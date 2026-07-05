@@ -3,7 +3,7 @@
 Operating manual for an agent (or human) bringing sloth-ios up from a
 cold clone. Charter in [`MISSION.md`](MISSION.md); pattern in
 [`docs/dark-factory.md`](docs/dark-factory.md); working rules in
-[`CLAUDE.md`](CLAUDE.md); per-view UI specs in
+[`AGENTS.md`](AGENTS.md); per-view UI specs in
 [`docs/views/`](docs/views/); roadmap in
 [`docs/milestones.md`](docs/milestones.md).
 
@@ -81,8 +81,8 @@ xcode-select --install
 - Foundation, Combine, Observation
 - OSLog (logging — local only, no network egress)
 
-No third-party SPM dependencies by default. If one becomes necessary,
-it lands with an explicit MISSION §2 audit recorded in `PROGRESS.md`.
+No third-party SPM dependencies by default (see [`AGENTS.md`](AGENTS.md)
+— Discipline).
 
 ---
 
@@ -99,13 +99,9 @@ it lands with an explicit MISSION §2 audit recorded in `PROGRESS.md`.
 | `make test`                                    | `swift test` + Xcode unit tests |
 | `make clean`                                   | removes `.build/`, `DerivedData/`, generated `.xcodeproj` |
 
-**Hard rules** (from [`CLAUDE.md`](CLAUDE.md)):
-
-- `swift test` must return 0. Never commit a red test.
-- `swift build` and `xcodebuild` are **warning-clean**. Treat any new
-  warning as a failed build.
-- Generated artefacts are never staged: `*.xcodeproj`, `.build/`,
-  `DerivedData/`, `*.xcuserdata`, `*.dSYM/`, `.DS_Store`.
+**Hard rules**: green tests, warning-clean builds, never stage
+generated artefacts (see [`AGENTS.md`](AGENTS.md) — Discipline,
+Conventions).
 
 ---
 
@@ -176,11 +172,8 @@ the sloth instance over the tailnet.
 | `docs/views/<name>.md`            | per-view UI specs |
 | `docs/wiki/<name>.md`             | concept-oriented knowledge base |
 
-**Hard rules**:
-
-- No new files at repo root. Everything has a home.
-- Never `git add -A` / `git add .`. Stage by specific path.
-- Don't commit the binary build artefacts (see §4).
+**Hard rules**: no new root files, stage by specific path, never
+commit build artefacts (see [`AGENTS.md`](AGENTS.md) — Hard "don't"s).
 
 ---
 
@@ -188,23 +181,14 @@ the sloth instance over the tailnet.
 
 ### 8.1 Add a view
 
-See [`CLAUDE.md`](CLAUDE.md) "How to add a view" — 5-step checklist:
+See [`AGENTS.md`](AGENTS.md) "How to add a view" — 5-step checklist:
 write the spec, add the SwiftUI file, wire navigation, write the
 state test if applicable, build + test before commit.
 
 ### 8.2 Add a record type to consume
 
-If sloth adds a new JSONL `type` (e.g. `{"type":"smb",...}`):
-
-1. Add a case to `SlothRecord` in `Sources/SlothCore/SlothRecord.swift`.
-2. Decode in `SlothClient.parseLine` and dispatch to the store.
-3. Add a ring in `SlothStore` if the records aren't going through an
-   existing one.
-4. Update or create the consuming view.
-5. Test: feed a canned JSONL line into the fake transport, assert
-   the store sees it.
-6. Reference: the sloth-side schema page at
-   `sloth/docs/wiki/jsonl-schema.md`.
+See [`AGENTS.md`](AGENTS.md) "How to add a record type to consume" —
+6 steps from `SlothRecord` case to canned-JSONL store assertion.
 
 ### 8.3 Add a chart
 
@@ -232,14 +216,8 @@ If sloth adds a new JSONL `type` (e.g. `{"type":"smb",...}`):
 
 ## 10. Git & release workflow
 
-From [`CLAUDE.md`](CLAUDE.md):
-
-- Branches: work on `main`. No long-running feature branches.
-- Commits: imperative subject, blank line, body explaining the *why*,
-  `Co-Authored-By` trailer.
-- Push after each green commit. Human reviews on GitHub.
-- Never `git push --force` to `main`. Never `--no-verify`. Never
-  `git reset --hard` without explicit user authorisation.
+Branching, commit format, push cadence, and destructive-op rules:
+(see [`AGENTS.md`](AGENTS.md) — Conventions, Hard "don't"s).
 
 CI (once configured): `swift test` + `xcodebuild test` on every PR.
 Both must be green for merge.
@@ -270,7 +248,7 @@ next milestone from `docs/milestones.md`.
 |---------------------------------------|------|
 | The non-negotiable charter            | [`MISSION.md`](MISSION.md) |
 | The dark-factory pattern              | [`docs/dark-factory.md`](docs/dark-factory.md) |
-| Working rules for the repo            | [`CLAUDE.md`](CLAUDE.md) |
+| Working rules for the repo            | [`AGENTS.md`](AGENTS.md) |
 | The roadmap                           | [`docs/milestones.md`](docs/milestones.md) |
 | Per-view UI specs                     | [`docs/views/README.md`](docs/views/README.md) |
 | JSONL record contract (consumer side) | [`docs/wiki/jsonl-protocol.md`](docs/wiki/jsonl-protocol.md) |

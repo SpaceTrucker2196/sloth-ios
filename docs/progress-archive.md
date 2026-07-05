@@ -1,0 +1,809 @@
+# Progress archive — completed phases (moved from PROGRESS.md)
+
+## Recently landed
+
+### 2026-07-05 — Ring caps cross-checked against sloth (M2 follow-up)
+**Commits**: *(this entry lands with the commit)*
+**Touched**: `Sources/SlothCore/RingSizes.swift`.
+**Why**: The M2 defaults were best-effort guesses pending a check
+of sloth's canonical constants. Checked `include/sloth.h`:
+`MAX_{DNS,TLS,QUIC,HTTP,NTP,ICMP}_LOG = 256`, `MAX_ALERTS = 128`,
+`MAX_PACKETS = 256`, `MAX_CONNS = 1024`. Six defaults drifted
+(dns/tls/http 1024→256, quic 512→256, ntp 128→**256** — we were
+*under*, packets 1024→256); icmp + alerts already matched. The
+`connections` ring (2048) intentionally stays: it holds flow
+*history* for RTT sparklines, not the active-flow table
+`MAX_CONNS` caps, and the doc comment now says so.
+**Verification**: `swift test` 193/193 (no test pins the defaults).
+**Follow-ups**:
+- The `_sloth._tcp` mDNS-publishing issue (2026-05-29 discovery
+  follow-up) is now filed:
+  [sloth #29](https://github.com/SpaceTrucker2196/sloth/issues/29)
+  (operator-authorized). Local-network discovery lights up when it
+  closes.
+- Noticed while checking: sloth #5 (connection records) is closed —
+  the M6 Flows band should light up against a current sloth build.
+  Worth an end-to-end run over the tailnet.
+
+### 2026-07-04 — tools/fake-producer.py (repeatable render checks)
+**Commits**: *(this entry lands with the commit)*
+**Touched**: `tools/fake-producer.py`, `tools/README.md`.
+**Why**: The Tufte dashboard was verified against a scratch fake
+producer that died with the agent session. Checked in so any
+session (human or agent) can light up every view without a live
+sloth: `python3 tools/fake-producer.py`, connect the sim to
+`tcp:127.0.0.1:8765` (or seed the legacy profile key — recipe in
+the README — and let launch auto-connect dial it).
+
+**Scope note (MISSION §2)**: dev tool, not app code. Python 3
+stdlib only, listens on loopback only, never imported by the app,
+nothing ships. The app remains read-only; the tool exists so the
+*verification* discipline ("manual run in the simulator before
+committing") is repeatable rather than bespoke per session.
+
+**Follow-ups**: none. If sloth's schema grows fields, update the
+producer alongside `SlothRecord` or the new band renders its quiet
+row during checks.
+
+### 2026-07-04 — ICMPLogView (dashboard drill-in follow-up)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/ICMPClassify.swift` — type/code → display name
+  (mirrors sloth's `src/icmp_log.c` `desc_v4`/`desc_v6` exactly) +
+  coarse filter categories (echo / error / discovery / other).
+  Family is inferred from the address literal (`:` ⇒ v6) since the
+  wire subset carries no `is_v6`.
+- `Tests/SlothCoreTests/ICMPClassifyTests.swift` — 8 hermetic tests
+  incl. the discriminating type-3 case (v4 Unreachable vs v6 TTL
+  Exceeded). 193/193 total green.
+- `docs/views/icmp-log.md` — spec.
+- `App/Views/ICMPLogView.swift` — FilterBar (All/Echo/Errors/
+  Discovery + search) over the newest-first ring; error rows read
+  WARN orange without waiting for an alert; hot IPs in tier hue.
+- Wired: dashboard ICMP panel title now drills in (`DashboardRoute
+  .icmp`); iPhone gets an ICMP tab (More overflow).
+
+**Verification**: `swift test` 193/193; iPad + iPhone builds
+warning-clean; live board (fake producer) shows the ICMP panel
+with its drill chevron and counts. Drill-in *tap* uses the same
+NavigationLink mechanism as every other band; verified by
+inspection + compile, worth one manual tap when next on-device.
+
+**Why**: The ICMP panel was the only band on the Tufte board with
+no destination. Closes the first follow-up from the dashboard
+entry below.
+
+### 2026-07-04 — iPad Tufte band dashboard (supersedes M7 tile grid)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `docs/views/dashboard.md` — spec rewritten for the band layout.
+- `Sources/SlothCore/DashboardRoster.swift` — pure row-selection
+  helpers (`newest` with stable id tie-break, `critAlerts`,
+  `topHosts`, `packetTail`, `logTail`). Views only render.
+- `Tests/SlothCoreTests/DashboardRosterTests.swift` — 12 hermetic
+  tests (sorting, tie-breaks, caps, empty/zero-limit edges).
+  185/185 total green.
+- `App/Views/DashboardView.swift` — rewritten orchestrator. The M7
+  3×2 grid of embedded tab views (six sets of chrome, six scroll
+  views) is replaced by sloth's own TUI dashboard shape
+  (`src/views/dashboard.c`): dense read-only bands, worst news
+  highest — Interfaces+Summary / CRITICAL / Connections+Top hosts /
+  WiFi|Roaming|Beacons / mDNS|DHCP|SSDP / ARP|Deauth / DNS|ICMP /
+  Packets. Tap a band title to push the full view. Forces dark on
+  true black.
+- `App/Views/DashboardBands.swift`, `DashboardGrid.swift`,
+  `DashboardPrimitives.swift` — band/panel implementations,
+  mirroring sloth's dashboard file split. Hairline rules, small-caps
+  titles with inline counts, monospaced numerals, alert-hot IPs,
+  brand hues, heat-graded signal strength. Top-host sparklines are
+  heat-graded against the *panel's* max (per the charts convention)
+  so ink intensity ranks the small multiples.
+- `App/Views/DashboardCard.swift` — **deleted** (tile grid retired).
+- `App/ContentView.swift` — auto-connects the saved active profile
+  on launch (same trust boundary as the M8 reconnect loop; fresh
+  installs still wait for explicit input).
+- `App/Views/SystemPulseChip.swift` — **bug fix**: the rec/s readout
+  stored `Timer.publish(...).autoconnect()` on the view struct, so
+  under live load every re-render re-created the timer and the 1 s
+  tick never fired — 0.0/s exactly when records were flowing. Now
+  samples `store.recordsReceived` from a stable `.task` loop.
+
+**Verification**:
+- `swift test` — 185/185 (173 pre-existing + 12 roster).
+- `xcodebuild build` — iPad Pro 13-inch (M5) + iPhone 17 Pro
+  simulators, warning-clean.
+- Manual: fed the board from a scratch fake-JSONL producer
+  (127.0.0.1:8765, every record type, sinusoidal rates). All bands
+  populate; CRIT band shows red-striped rows with hot IPs; pulse
+  chip reads a real rec/s; sparklines animate; drill-in pushes the
+  full views.
+
+**Why**: The M7 dashboard tiled six full interactive views — heavy
+chrome, low data density. sloth's TUI composite is already the
+Tufte answer: small multiples, word-sized sparklines, hairline
+structure, direct labels, drill-in on demand. The iPad has the
+pixels for the whole band stack; now it uses them.
+
+**Follow-ups**:
+- ICMP has no dedicated drill-in view; the ICMP panel title is the
+  only non-navigable one. Add an ICMP log view if operators want it.
+- Landscape puts the thirds rows at very generous widths; a 2×-wide
+  column split for DNS|ICMP on ultra-wide Stage Manager windows is a
+  possible refinement.
+- The fake producer script used for verification lives in the agent
+  scratchpad only — a checked-in `tools/fake-producer` would make
+  render checks repeatable (needs a MISSION §2 think: it's a dev
+  tool, not app code).
+
+### 2026-05-29 — Local-network discovery (Bonjour)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/SlothDiscovery.swift` —
+  `@MainActor @Observable` browser around `NetServiceBrowser` for
+  `_sloth._tcp.`. Resolves to `hostname:port`, exposes
+  `[DiscoveredService]` with `start()` / `stop()`. NSObject
+  delegate isolation is handled via `@MainActor BrowserDelegate`
+  + `@preconcurrency` conformance to the Foundation protocols
+  (NetService(Browser)Delegate predate Swift Concurrency).
+- `App/Views/DiscoveryView.swift` — sheet. Browse runs only
+  while the sheet is on-screen. Tap a row → adds a
+  `NamedProfile` to `ProfileStore` (or reactivates an existing
+  one with the same URI) and dismisses; the coordinator picks
+  up the new active profile via the `activeID` `onChange` hook
+  already in `ContentView`.
+- `App/ContentView.swift` — adds a `wifi.router` icon button in
+  the connection bar plus a "Discover…" entry in the ellipsis
+  menu.
+- `project.yml` — adds `NSBonjourServices` (`_sloth._tcp`) and
+  `NSLocalNetworkUsageDescription` to the generated Info.plist
+  (iOS 14+ requirement for any Bonjour browse).
+- `Tests/SlothCoreTests/SlothDiscoveryTests.swift` — 6 new
+  hermetic tests covering `DiscoveredService` → `ConnectionProfile`
+  derivation (trailing-dot trim, dotless passthrough, TXT
+  preservation, equality), `SlothDiscovery` initial state, and
+  no-op stop-from-idle. The browser-against-a-real-bonjour-stack
+  path is integration territory and isn't unit-tested.
+- `docs/wiki/discovery.md` — new wiki page documenting both
+  sides of the contract (service type, TXT, Info.plist keys,
+  producer-side implementation hints, UX notes).
+
+**Tests**: 136/136 green (130 pre-existing + 6 new).
+
+**Verification**:
+- `swift test` — 136/136.
+- `xcodebuild build` on iPhone 17 Pro simulator — clean.
+- Manual: connection bar shows the new `wifi.router` button and
+  the ellipsis menu carries Discover…. The sheet shows the
+  "Looking for sloth instances…" placeholder until the producer
+  side ships an mDNS responder.
+
+**Why**: Typing `tcp:host.tailnet:7777` is the wrong first
+contact for a new operator. With Bonjour the natural UX is
+"sloth is on the network — pick it from the list". Dark-on-
+producer is the same pattern as M6: build the consumer side
+now so it lights up the second the producer ships.
+
+**Follow-ups**:
+- File an issue on sloth: `[mdns] publish _sloth._tcp via Avahi
+  when --data-socket is bound`. Linux Avahi is the standard
+  path; macOS uses dns-sd. The TXT record can stay empty for
+  v1; sloth-ios shows the rows fine without it.
+- If/when sloth grows a `discovery` flag (publish only when an
+  operator opts in), document the flag in
+  [`docs/wiki/discovery.md`](docs/wiki/discovery.md).
+- Out of scope here: a Tailscale-peer browse mode for the
+  cross-LAN case. Bonjour solves the home-LAN case cleanly;
+  tailnet remote access already works via the saved-profile
+  flow.
+
+### 2026-05-29 — M6: ConnectionsView + RTTSparkline (dark)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/SlothRecord.swift` — adds `case
+  connections(ConnectionEntry)` (with `.unknown` forward-compat
+  preserved). `ConnectionEntry` covers the full sloth#5 spec:
+  required `ts`/`src`/`dst`/`proto`/`rx_bytes`/`tx_bytes`,
+  optional `state`/`rtt_ms`/`retx`/`age_s` (UDP and pre-emit
+  flows omit). `flowKey` returns the natural
+  `"src→dst/proto"` tuple every view dedups on.
+- `Sources/SlothCore/RingSizes.swift` — new `connections` cap
+  (default 2048). Bigger than the log rings because the wire
+  emits one record per active flow per tick; the aggregator
+  reduces the ring to a snapshot.
+- `Sources/SlothCore/SlothStore.swift` — `connections: [ConnectionEntry]`
+  ring + ingest routing + `reset()` clears it.
+- `Sources/SlothCore/ConnectionsAggregator.swift` — pure helper.
+  `snapshot(from:sparklineCapacity:sort:) → [ConnectionFlow]`.
+  Single-pass group by `flowKey`, latest record wins, last 30
+  non-nil `rtt_ms` samples per flow form the sparkline series.
+  Sort enum: `bandwidth` (default) / `state` / `rtt` / `age`,
+  with stable tie-breakers and nil-RTT-last semantics.
+- `Tests/SlothCoreTests/ConnectionEntryTests.swift` — TCP +
+  UDP decode, on-wire shape (omitIfPresent for nils), full
+  round-trip for both protocols.
+- `Tests/SlothCoreTests/ConnectionsAggregatorTests.swift` —
+  empty input, dedup latest-wins, multi-flow separation,
+  sparkline capacity + nil-RTT skip, every sort mode (incl.
+  nil-RTT tail), `apply(sort:)` idempotency.
+- `Tests/SlothCoreTests/SlothStoreTests.swift` — adds
+  connections-ring routing + cap eviction tests.
+- `App/Charts/RTTSparkline.swift` — line chart of the per-flow
+  sample tail, heat-graded by latest value vs. local peak.
+  Sister of M4's `BandwidthSparkline`; reduce-motion respected.
+- `App/Views/ConnectionsView.swift` — proto chip filter
+  (All / TCP / UDP), search across src/dst/state, toolbar sort
+  menu, alert-hot src/dst IPs via `AlertHotIndex`. Empty state
+  explains the sloth#5 dependency.
+- `App/Views/ConnectionDetailView.swift` — push destination.
+  Larger sparkline card, RX/TX/RTT/Retx/Age/Updates metric
+  grid, optional state.
+- `App/ContentView.swift` — adds a `Flows` tab between TLS and
+  HTTP. On iPhone the resulting 6-tab roster overflows into a
+  "More" menu (Flows + HTTP behind it) — standard SwiftUI
+  behaviour for 6+ tabs; matches the M7 spec's importance order
+  with Connections at position 5.
+- `App/Views/DashboardView.swift` — bumps the iPad grid from
+  2×2 to 3×2 so Flows + HTTP get their own tiles alongside the
+  M3–M5 quartet.
+- `docs/views/connections.md` — spec rewritten from the
+  blocked stub to the implemented shape.
+
+**Tests**: 130/130 green (115 pre-existing + 15 new M6 across
+`ConnectionEntryTests`, `ConnectionsAggregatorTests`, the two
+new `SlothStoreTests` cases).
+
+**Verification**:
+- `swift test` — 130/130.
+- `xcodebuild build` on iPhone 17 Pro + iPad Pro 13-inch (M5)
+  simulators: clean.
+- Manual: iPad portrait dashboard renders the new Flows tile in
+  the bottom-left with the M6 empty state and the All/TCP/UDP
+  chips already wired. iPhone TabView shows
+  Alerts/Hosts/DNS/TLS/More with Flows + HTTP behind More
+  (standard iOS overflow for 6+ tabs).
+
+**Why**: The iOS side of M6 wasn't gated on sloth shipping the
+emitter — the ring, aggregator, view, sparkline, and tests can
+all ship hermetically. When sloth#5 closes, the view lights up
+with zero further iOS work. Until then the empty state names
+the dependency so an operator-side question ("why no flows?")
+links back to the producer.
+
+**Follow-ups**:
+- Once sloth emits `{"type":"connections", …}` records the M6
+  view populates automatically. End-to-end verification (RTT
+  sparklines from a live tailnet) becomes possible at that
+  point.
+- The iPhone TabView has 6 tabs; SwiftUI moves the last two
+  behind the "More" affordance. Acceptable; the M7 importance
+  order (Alerts → Top hosts → DNS → TLS → Connections) is
+  preserved in the underlying order. If the operator survey
+  ever flags HTTP as needing primary access on iPhone, drop a
+  tab or move to a custom tab bar.
+- All v1.0 milestones (M1–M8) now have their consumer side
+  shipped. Adjacent v1.x vectors per the milestones doc:
+  macOS Catalyst pass, per-host pin / favourite, snapshot
+  export, Stage Manager polish.
+
+### 2026-05-27 — M8: Polish, profiles, reconnect
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/ProfileStore.swift` — `@MainActor @Observable`
+  list of `NamedProfile`s (`UUID + label + ConnectionProfile`)
+  with an `activeID`. Persisted to `UserDefaults` under a single
+  JSON-encoded key (per MISSION §2(5), the only thing this app
+  ever writes to disk). First-load upgrades the M1 single-profile
+  key so operators who came up from M1 don't lose their entry.
+- `Sources/SlothCore/Reconnector.swift` — actor with exponential
+  backoff (1 s → 30 s cap, ×2). Sleeper is injectable so tests
+  drive deterministic timing. `reset()` after a successful
+  connect drops the delay back to `initialDelay`.
+- `Sources/SlothCore/SlothLog.swift` — `@MainActor @Observable`
+  in-memory ring (cap 500) mirrored to `os.Logger` so entries
+  also land in Console.app / `log stream`. Carries project
+  metadata only — connection events, parse errors, backoff,
+  scene lifecycle. **Never** carries record content
+  (MISSION §2(5)); the share-sheet export is plain text, not
+  JSONL.
+- `App/ConnectionCoordinator.swift` — now drives a connect-retry
+  loop. On stream end (clean or error) it waits the current
+  `Reconnector` delay, then redials. Cancels cleanly when the
+  Task is cancelled on `.background`. Pulls the active profile
+  from `ProfileStore`; commits a new URI to the store on user
+  Connect.
+- `App/Views/SettingsView.swift` — list of saved profiles with
+  tap-to-activate / swipe-to-delete / swipe-to-edit. "Add
+  profile" opens a sheet-mounted `ProfileEditor` that parses
+  `tcp:HOST:PORT` before saving. Footer reiterates the no-record-
+  persistence rule.
+- `App/Views/DiagnosticsView.swift` — recent log lines with a
+  per-level filter strip and a share-as-text menu that exports
+  the visible window via `ShareLink`. `Clear log` is a
+  destructive button on the same menu (the underlying log is
+  in-memory so this is fine; no record forensic record is
+  destroyed).
+- `App/ContentView.swift` — connection bar gains an
+  `ellipsis.circle` menu (Profiles… / Diagnostics…) presenting
+  the two new screens as sheets. The bar also passes the new
+  `ProfileStore` + `SlothLog` to the coordinator. Scene-phase
+  transitions are logged.
+- `App/SlothIOSApp.swift` — `@State` for `SlothStore`,
+  `ProfileStore`, and `SlothLog`; all three injected into the
+  environment so every view can `@Environment(...)` per
+  CLAUDE.md.
+
+**Tests**: 16 new (115 total, all green).
+- `ProfileStoreTests` — add / remove (active vs non-active),
+  setActive, update preserves id, persistence round-trip via a
+  scoped `UserDefaults` suite, legacy M1 single-profile upgrade
+  path.
+- `ReconnectorTests` — backoff progression (1, 2, 4, 8, 16, 30),
+  reset behaviour, custom initial / multiplier, propagated
+  sleeper error.
+- `SlothLogTests` — level / category / message round-trip, ring
+  cap eviction, clear, export text shape.
+
+**Verification**:
+- `swift test` — 115/115 green.
+- `xcodebuild build` — iPhone 17 Pro and iPad Pro 13-inch (M5)
+  simulators both clean.
+- Manual: iPhone shows the new ellipsis menu in the connection
+  bar; iPad dashboard composite still renders with the menu on
+  the bar above. Saved-profile UI verified via the simulator.
+
+**Why**: M8 closes the production-quality lifecycle gap.
+Multi-profile lets an operator switch sloth instances without
+re-typing the URI. Exponential-backoff retry survives
+flaky-network handoffs without burning battery on a tight loop.
+OSLog diagnostics let a remote operator capture "what just
+happened" without attaching a debugger.
+
+**Follow-ups**:
+- M6 (Connections + RTT) is the remaining milestone, still gated
+  on sloth emitting a `connections` JSONL record. Tracked upstream
+  as [sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5).
+- Adjacent v1.x vectors per the milestones doc: macOS Catalyst
+  pass, per-host pin, Stage Manager polish.
+
+### 2026-05-27 — M7: Composite dashboard (iPad-first)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `App/Views/DashboardView.swift` — 2×2 `Grid` of `DashboardCard`s
+  tiling Alerts / Top hosts / DNS / TLS. Each tile embeds its
+  production view (M3 / M4 / M5) inside its own `NavigationStack`
+  so push destinations (alert detail, host detail) still work
+  from within the tile.
+- `App/Views/DashboardCard.swift` — reusable card wrapper. Thin
+  title bar (icon + label) over a rounded-rectangle content area
+  with a quaternary border. Static; no pinch / drag (per spec).
+- `App/Views/SystemPulseChip.swift` — at-a-glance health bar.
+  Shows status pill + `rec/s` readout (1-second sampled delta of
+  `recordsReceived`) + one dot+count per severity tier
+  (CRIT / WARN / LOW). Visible on every screen — slots between
+  the connection bar and the content area.
+- `App/ContentView.swift` — switches on `horizontalSizeClass`:
+  `.regular` (iPad, large iPhone landscape) → `DashboardView`,
+  `.compact` (iPhone) → existing TabView. Connection bar
+  compacted to a single row (text field + connect button) since
+  the system-pulse chip now carries the status pill.
+
+**Verification**:
+- `swift test` — 99/99 green (no new SlothCore code).
+- `xcodebuild build` on iPhone 17 Pro simulator — clean.
+- `xcodebuild build` on iPad Pro 13-inch (M5) simulator — clean.
+- Manual on iPad portrait: dashboard renders the four tiles
+  with their empty states, system pulse shows `idle / 0.0/s /
+  0 0 0`. iPhone retains the 5-tab TabView with the same pulse
+  chip above the tabs.
+
+**Why**: M7 is the payoff of M3–M5. The same alerts / hosts /
+log views the operator scrolls separately on iPhone tile into a
+single iPad screen, mirroring sloth's static TUI composite —
+one glance answers "what is on this network right now". The
+system-pulse chip carries the TUI's header row so the operator
+gets live rec/s + tier counts from every screen.
+
+**Follow-ups**:
+- M6 (Connections + RTT) is still gated on sloth emitting a
+  `connections` JSONL record. When that lands, add a fifth tile
+  to the dashboard grid (3×2 layout, or move Top hosts adjacent
+  to Connections so the flow → host correlation reads left-to-
+  right).
+- M8 (Polish / multi-profile / reconnect) is unblocked next.
+  StatusPill on every nav bar is partially done by the
+  `SystemPulseChip`; the rest of M8 (saved profiles, OSLog
+  diagnostics view, exponential-backoff `Reconnector`) is open.
+
+### 2026-05-27 — M5: DNS, TLS, HTTP log views
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/LogFilter.swift` — pure substring matcher,
+  case-insensitive, multi-word AND, applied across a caller-
+  supplied list of haystack fields. Mirrors sloth's `filter.c`
+  semantics.
+- `Sources/SlothCore/LogStats.swift` — `QTypeDistribution.shares`
+  (slice-per-qtype with "other" rollup for the DNS pie) +
+  `TLSVersionMix.shares` (TLS version share with stable colour
+  order across frames + `isDeprecated(...)` for the 1.0 / 1.1
+  WARN tinting).
+- `Tests/SlothCoreTests/LogFilterTests.swift` — 15 hermetic tests
+  covering empty / case-insensitive / multi-word substring +
+  qtype canonicalisation + TLS version canonicalisation + the
+  deprecated flag. 99/99 total `swift test` green.
+- `App/Views/FilterBar.swift` — reusable chip strip + search
+  field. Generic over a `Hashable` chip id; caller supplies the
+  chip labels + tints. Owns no filtering itself, just rendering.
+- `App/Views/DNSLogView.swift` — Q / R direction chips, qtype
+  pie at the top, list with brand-coloured qnames, NXDOMAIN
+  highlighting, alert-hot src / answer IPs taking on their tier
+  hue via `AlertHotIndex`.
+- `App/Views/TLSLogView.swift` — "TLS 1.0 / 1.1" filter chip,
+  the stacked version-mix bar, JA3 prefix coloured by hash so
+  the same JA3 across hosts pops as a correlation cue. WARN tint
+  on deprecated tiers without waiting for an alert.
+- `App/Views/HTTPLogView.swift` — GET / POST / Other chips, no
+  chart (HTTP today is dominated by captive-portal noise; a
+  method-distribution chart would be uninformative). Row-side
+  heuristic that highlights classic recon paths (`.git/`,
+  `.env`, `/wp-admin`, …) in CRIT red *before* sloth flags them.
+- `App/Charts/QTypeDistributionChart.swift` — donut summary at
+  the top of `DNSLogView`. Stable per-qtype colour. Annotations
+  on slice; legend hidden. Animation disabled under
+  `accessibilityReduceMotion`.
+- `App/Charts/TLSVersionMixChart.swift` — stacked horizontal
+  `BarMark`, single bar visualising proportions. WARN tint on
+  TLS 1.0 / 1.1 segments. Custom legend below with hit counts.
+- `App/Theme.swift` — adds `Theme.ja3Color(_:)` (hash → 8-colour
+  warm-leaning phosphor palette) + an `extension ShapeStyle
+  where Self == Color` so `foregroundStyle(.alertHotWarn)` and
+  friends resolve. Without that, the dot-shorthand only sees
+  SwiftUI's built-ins and the rows fail to compile.
+- `App/ContentView.swift` — `DebugLogView` tab dropped; the
+  TabView is now Alerts / Hosts / DNS / TLS / HTTP.
+- `App/Views/DebugLogView.swift` — **deleted**. Its M2 → M3
+  bridge job is done; the per-category views replace its three
+  ring sources.
+
+**Verification**:
+- `swift test` — 99/99 green (84 pre-existing + 15 new
+  LogFilter / LogStats).
+- `xcodebuild build` on iPhone 17 Pro simulator — zero errors.
+- Manual: launches to the Alerts tab; tab bar shows all five
+  tabs with their SF Symbols (`exclamationmark.triangle`,
+  `globe.americas`, `questionmark.bubble`, `lock`, `globe`).
+  Each per-log tab shows its empty state ("No DNS records",
+  "No TLS handshakes", "No HTTP traffic") with explanatory
+  text until traffic flows.
+
+**Why**: M5 turns the merged debug log into three operator-
+ready surfaces, each with its own filter axes and its own
+summary chart. The cross-panel hot-IP coloring established in
+M3 is now wired through DNS / TLS / HTTP rows too — an IP
+flagged in any alert renders in the alert's tier hue everywhere
+it appears, mirroring sloth's `tui_alert_hot_*` rule.
+
+**Follow-ups**:
+- The HTTP attack-path heuristic is a small client-side cue,
+  not a replacement for sloth's `HTTP_ATTACK_PATH` alert. When
+  sloth emits that alert the row's CRIT tint comes through the
+  `AlertHotIndex` path; the heuristic acts before the alert
+  fires.
+- M6 (Connections + RTT) may block on a sloth-side `connections`
+  JSONL record; file the gap there when picking up M6.
+
+### 2026-05-27 — M4: TopHostsView + activity sparklines + protocol stack chart
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/HostAggregator.swift` — pure aggregator that
+  turns the store's rings into a `TopHostsSnapshot` (top 32 external
+  hosts by record count). Skips RFC1918, loopback, link-local,
+  multicast (v4 + v6) so the list focuses on external traffic, per
+  `src/top_hosts.c`. Per-IP per-minute sparkline samples (30 bins ×
+  60s). Hostname resolved via the store's DNS cache (most-recent
+  A/AAAA answer wins). JA3 set collected from TLS records.
+  **Schema substitution**: sloth's JSONL emits protocol logs but
+  no byte counters; rate samples are therefore *records / minute*
+  rather than *bytes / minute*. When sloth grows a `bw` record the
+  data source can swap without UI changes.
+- `Tests/SlothCoreTests/HostAggregatorTests.swift` — 14 hermetic
+  tests covering external/internal IP discrimination (v4 + v6
+  edges, 172.16/12 boundary), per-minute bucketing,
+  out-of-window drop, per-protocol merging, sort order,
+  `topN` cap.
+- `App/Theme.swift` — `Theme.brand(for: hostname)` lookup table
+  (cloudflare/google/firefox/cloudflare/etc.) mirroring sloth's
+  `tui_brand_addstr`. Order matters in the table — longer needles
+  first so `cloudflare` wins over a hypothetical `cloud`.
+- `App/Charts/BandwidthSparkline.swift` — reusable inline chart.
+  Pure `[Double]` series; heat-grades the trace by value when no
+  caller-tint is given (`Color.heat` from M3). Hidden axes; fits
+  any frame. Will be reused by M6 connections (RTT) and M7
+  composite dashboard. `accessibilityReduceMotion` respected.
+- `App/Views/TopHostsView.swift` — the new tab. Top section is a
+  `ProtocolStackChart` (stacked `AreaMark`s for TLS/QUIC/DNS/HTTP
+  shares across hosts so the operator sees "what kind of traffic
+  is this" at a glance). Below: list of hosts with a per-row
+  sparkline, brand-coloured hostname when known, alert-hot
+  override (flame.fill + severity tier hue) when the hot index
+  flags the row's IP.
+- `App/Views/TopHostDetailView.swift` — push destination. Larger
+  sparkline, per-protocol breakdown bars, JA3 fingerprint list,
+  recent qnames that resolved to this IP.
+- `App/ContentView.swift` — Hosts tab added between Alerts and
+  Debug.
+
+**Verification**:
+- `swift test` — 84/84 green (70 pre-existing + 14 new HostAggregator).
+- `xcodebuild build` on iPhone 17 Pro simulator — zero errors, the
+  one irrelevant AppIntents metadata note.
+- Manual: launches with three tabs (Alerts / Hosts / Debug). Hosts
+  tab shows the empty state ("No external hosts yet") with the
+  filter rationale until traffic flows.
+
+**Why**: M4 ships the second production view and lands two
+load-bearing pieces the next milestones inherit: a reusable
+`BandwidthSparkline` (M6 uses it for RTT, M7 for dashboard tiles)
+and the hostname brand-colouring helper (M5 logs apply it to SNI
+and HTTP host columns). Spec called for "bandwidth bytes" but
+sloth doesn't emit byte counters in JSONL — substituted
+records-per-minute as an honest activity proxy. Documented the
+substitution prominently so it doesn't become a hidden lie.
+
+**Follow-ups**:
+- **sloth-side schema gap**: per-host or per-conn byte counters in
+  the JSONL stream would let this view show real bandwidth instead
+  of record rate. File an issue on the sloth repo when picking
+  this up.
+- Brand table is hardcoded; would be nicer as a JSON resource that
+  reloads without a rebuild. Low priority — operator preferences
+  rarely change.
+- The `ProtocolStackChart` weights bins by each host's per-protocol
+  share rather than tracking per-protocol bins independently. Loses
+  fidelity when a host's mix changes mid-window. Trade-off accepted
+  to keep `HostActivity` small (15 floats per host vs. 60).
+
+### 2026-05-27 — M3: AlertsView + three-tier palette + frequency chart
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/AlertBucketing.swift` — pure-Swift bucketing helper
+  that turns `[AlertEntry]` into `[AlertFrequencyBucket]` (per-minute
+  counts split by severity over a window). Bucketing key is `lastSeen`,
+  weight = 1 per entry (sloth doesn't emit per-hit timestamps).
+- `Tests/SlothCoreTests/AlertBucketingTests.swift` — 8 hermetic tests
+  covering empty input, window edges (in vs out, exactly on edge),
+  zero-window, same-minute same-sev collapse, same-minute different-sev
+  split, different-minute split, mixed three-tier spread.
+- `App/Theme.swift` — SwiftUI `Color` extensions for the three-tier
+  alert palette (`.alertHotLow/Warn/Crit`), phosphor base hues, and
+  the heat gradient (`Color.heat(fraction)` mirrors sloth's `tui_heat`).
+  Adds `AlertSeverity.color` extension. SlothCore stays SwiftUI-free
+  per CLAUDE.md — Theme lives in `App/`.
+- `App/Charts/AlertFrequencyChart.swift` — Swift Chart `BarMark`
+  stacked by severity, last 60 minutes. X-axis domain anchored to the
+  full window so empty buckets still leave space. `.accessibilityLabel`
+  describes the trend. `accessibilityReduceMotion` disables the
+  ease-out animation.
+- `App/Views/AlertRowView.swift` — list row primitive. Leading 4-pt
+  severity stripe + SF Symbol prefix (info.circle / triangle / octagon)
+  + tier label + title + hit-count badge (×N when ≥ 2) + relative
+  time + optional second-line detail + optional match-IP badge
+  (`flame.fill` when the IP is currently hot, `network` otherwise).
+- `App/Views/AlertsView.swift` — the M3 view itself. Filter chips
+  (All / CRIT / WARN / LOW, with smart toggle semantics), search
+  field (substring against title + detail + key), the frequency chart,
+  the scrollable list. Empty states for "no alerts" vs "no matches".
+  Tick timer re-buckets every 5 s so the x-axis advances even when no
+  new alerts arrive.
+- `App/Views/AlertDetailView.swift` — push destination. Severity
+  header, full title + detail, first/last seen + computed span,
+  identity (key + match-IP coloured if hot), cross-reference counts
+  from `store.dns`/`tls`/`http` for the match-IP.
+- `App/ContentView.swift` — rewritten around a `TabView`: Alerts
+  (default tab, with a CRIT count badge) + Debug (the existing
+  merged log; M5 replaces it). Connection bar + status pill stay at
+  the top of every tab as global chrome.
+
+**Verification**:
+- `swift test` — 70/70 green (62 pre-existing + 8 new AlertBucketing).
+- `xcodebuild build` on `iPhone 17 Pro` simulator — zero warnings,
+  zero errors (one irrelevant AppIntents metadata note that's not
+  actionable).
+- `xcodebuild test` — 1/1 iOS smoke test passes; SlothCore suite is
+  driven through `swift test` independently.
+- Manual: launched on the iOS-17 simulator. Alerts tab shows the
+  empty state ("Nothing on fire") with the badge at 0 and the
+  frequency chart at full-width with an empty 60-minute axis. Debug
+  tab is unchanged from M2.
+
+**Why**: M3 is the first production view. It establishes the
+three-tier palette as a load-bearing concept (severity stripe + SF
+Symbol + bold weight on WARN/CRIT + cross-panel hot-IP coloring), the
+Swift Charts pattern (pure bucketing helper feeding a declarative
+`Chart` view), and the tab-as-feature-unit scaffold every following
+milestone slots into. The `flame.fill` glyph on hot IPs gives a
+preview of what M4–M6 panels will lean on when they render IPs that
+the alert-hot index has flagged.
+
+**Follow-ups**:
+- M4 (top hosts + bandwidth sparklines) and M5 (DNS/TLS/HTTP logs)
+  are both unblocked. M4 builds on the `Color.heat(_:)` helper this
+  commit introduced.
+- The cross-reference counts in `AlertDetailView` recompute every
+  body render — a single pass over the DNS/TLS/HTTP rings. Fine at
+  current ring caps (≤ 1024 each); revisit if a profiler ever flags
+  it.
+- `AlertEntry.identityKey` falls back to `"title#firstSeen"` when
+  `key` is nil — alerts without a key won't dedup in the List. sloth
+  always populates `key` per the schema, so this is defensive only.
+
+### 2026-05-26 — M2: SlothStore (state surface)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `Sources/SlothCore/RingSizes.swift` — public `RingSizes` value type
+  with per-record-type caps (dns 1024, tls 1024, quic 512, http 1024,
+  ntp 128, icmp 256, alerts 128). Defaults are best-effort against
+  sloth's `MAX_*_LOG`; the actual sloth caps should be cross-checked
+  and the defaults updated if they drift.
+- `Sources/SlothCore/AlertHotIndex.swift` — `@MainActor` IP → severity
+  cross-panel index with promotion-only semantics within the TTL
+  window (default 300 s). Higher-severity alerts promote; same-sev
+  refreshes the TTL; lower-sev within the window is dropped; once
+  expired, the entry reverts to whatever the next alert says. Handles
+  `[v6]:port`, `ip:port`, bare IP, bare v6 in `bareIP(_:)` so callers
+  can lookup with whatever representation the source view has.
+- `Sources/SlothCore/SlothStore.swift` — `@MainActor @Observable`
+  single source of truth. Per-type rings, alert dedup by
+  `key ?? title` (mirrors sloth's TUI: one row per alert key with
+  a hit count, not one row per occurrence), alerts sorted
+  newest-first by `lastSeen`, an `unknownCount` for forward-compat,
+  `connectionState`, `recordsReceived`, `lastError`. `ingest(_:)`
+  for single records; `ingest(stream:)` drives the lifecycle off
+  a `SlothClient.records(for:)` stream. `reset()` wipes everything
+  (including the hot index) on profile switch.
+- `App/SlothIOSApp.swift` — owns `@State private var store = SlothStore()`
+  and injects via `.environment(store)`. Every view now uses
+  `@Environment(SlothStore.self)` per CLAUDE.md (no `@StateObject`
+  for cross-view state).
+- `App/ConnectionCoordinator.swift` — `@Observable` view-local
+  coordinator that holds the editable URI buffer and owns the
+  client task; connection state lives on the store now. Replaces
+  the M1 `DebugLogController`.
+- `App/ContentView.swift` — rewired against the store. `ConnectionBar`
+  reads `store.connectionState` + `store.recordsReceived` + the
+  coordinator's URI binding.
+- `App/Views/DebugLogView.swift` — merged log view (every ring +
+  alerts, sorted by ts desc) that bridges M2 → M3+. Will be replaced
+  by `AlertsView` (M3), per-category log views (M5), etc. Bold
+  weight on WARN+CRIT severity rows already wired through here so
+  the per-view spec from M3 can lift the same conventions.
+- `Tests/SlothCoreTests/AlertHotIndexTests.swift` — 13 tests:
+  `bareIP` normalisation across v4/v6/bracketed/portless, promotion-
+  only across all severity transitions, TTL refresh on same-sev,
+  expiry, post-expiry re-write, ignore on missing `match_ip`.
+  Includes a deterministic `TestClock` so TTL tests are hermetic.
+- `Tests/SlothCoreTests/SlothStoreTests.swift` — 12 tests covering
+  per-type ring routing + caps, alert dedup-by-key (with title
+  fallback), newest-first sort by `lastSeen`, alert-cap eviction,
+  alert-hot wiring on alert ingest, `reset()` semantics, and the
+  `ingest(stream:)` lifecycle (state transitions on success +
+  error propagation through `lastError`).
+
+**Verification**:
+- `swift test` — 62/62 green (4 pre-existing + 29 from M1 + 25 from M2).
+- `xcodebuild build`/`test` on `iPhone 17 Pro` simulator: clean,
+  zero warnings, `SlothIOSAppTests` smoke passes.
+- Manual: installed + launched on the iOS-17 simulator; cold-start
+  UI renders identically to M1 (status pill, URI field, empty-state).
+  Internally everything now flows Client → Store → SwiftUI views.
+
+**Why**: M1 proved the wire works. M2 puts a typed state surface
+between the wire and the UI so every future view can subscribe
+without per-view plumbing. The promotion-only `AlertHotIndex` is
+the load-bearing piece for M3's three-tier palette: every other
+view that renders an IP looks it up via the index and inherits the
+hot severity hue from whichever alert promoted it.
+
+**Follow-ups**:
+- Ring caps should be cross-checked against sloth's `app.h` (or
+  wherever the canonical `MAX_*_LOG` constants live). Drift is not
+  a correctness break (rings just hold ±N records vs. the TUI) but
+  matching the TUI exactly is the point.
+- M3 (`AlertsView`) and M5 (DNS/TLS/HTTP log views) are now both
+  unblocked. Pick either; they share no surface.
+- The `DebugLogView` is intentional scaffolding; delete it as
+  per-category views replace each of its ring sources.
+
+### 2026-05-26 — M1: Connection plumbing
+**Commits**: *(see git log; this paragraph lands with that commit)*
+**Touched**:
+- `Sources/SlothCore/SlothRecord.swift` — Codable sum type for the
+  seven sloth JSONL `type` values (`dns`, `tls`, `quic`, `http`,
+  `ntp`, `icmp`, `alert`) plus a forward-compat `unknown(type:, ts:)`
+  case. Per-type sub-structs decode only the fields sloth-ios needs
+  today; unknown keys are ignored.
+- `Sources/SlothCore/LineReader.swift` — actor-isolated newline
+  framer that buffers across chunk boundaries, trims CRLF
+  defensively, and exposes a `lines(from:)` adapter that wraps a
+  byte-chunk `AsyncThrowingStream` as a line `AsyncThrowingStream`.
+- `Sources/SlothCore/ConnectionProfile.swift` — value type with
+  `tcp:HOST:PORT` parsing (incl. `[v6]:PORT`), URI round-trip, and
+  `UserDefaults` save/load. Only persistence in the app per MISSION
+  §2(5).
+- `Sources/SlothCore/SlothClient.swift` — `SlothTransport` protocol
+  seam (so tests inject a deterministic in-memory transport),
+  `NetworkTransport` default backed by `NWConnection`, and a
+  `SlothClient` that wires bytes → frame → JSON decode →
+  `SlothRecord` stream. Garbled lines are skipped, not fatal.
+- `Tests/SlothCoreTests/{LineReaderTests,SlothRecordTests,SlothClientTests,ConnectionProfileTests}.swift`
+  — 29 new hermetic tests covering chunk-split framing, every record
+  type round-trip, the forward-compat envelope, profile parsing/
+  persistence, and a full transport-fed pipe.
+- `App/DebugLogController.swift` — `@Observable` view-local
+  controller (per-CLAUDE.md "`@StateObject` for view-local only";
+  using the iOS-17 `@Observable` + `@State` equivalent). Owns the
+  records ring (500-line cap), connection state, and the active
+  Task. Pre-M2 stand-in for `SlothStore`.
+- `App/ContentView.swift` — connection-bar (status pill, URI field,
+  Connect button) + scrolling log list. View body well under 60
+  lines; children extracted (`ConnectionBar`, `StatusPill`,
+  `DebugLogList`, `LogRow`). Reconnects on `scenePhase == .active`,
+  cancels on `.background`.
+- `project.yml` — excluded `App/Tests/**` from the `SlothIOS` target
+  (it was getting compiled into the app), and gave `SlothIOSTests`
+  its own auto-generated Info.plist + bundle id so the unit-test
+  bundle code-signs cleanly.
+- `Makefile` — `iPhone 15` was the hardcoded destination, but only
+  iPhone 17-class simulators are installed on this Mac; bumped to
+  `iPhone 17 Pro`.
+
+**Verification**:
+- `swift test` — 33/33 green (4 pre-existing AlertSeverity + 29 new).
+- `xcodebuild ... build` — clean, zero warnings.
+- `xcodebuild ... test` — `SlothIOSAppTests` smoke passes on
+  `iPhone 17 Pro` simulator.
+- Manual: installed and launched the app on the iOS-17 simulator;
+  cold-start UI renders correctly (status pill `idle`, URI field
+  pre-populated with default, empty-state placeholder). End-to-end
+  wire validation against a real sloth instance is up to the
+  operator — `cfprefsd` caches `UserDefaults` aggressively, so
+  injecting a profile from outside the running sim isn't a clean
+  smoke path.
+
+**Why**: M1 is the wire-proof milestone. Before any UI design work,
+we needed end-to-end evidence that bytes off the sloth `--data-socket`
+parse into typed records. The transport seam matters as much as the
+codec — every milestone past M1 substitutes a fixture transport in
+its tests, so this layout is load-bearing.
+
+**Follow-ups**:
+- M2 is unblocked: replace the in-process `DebugLogController` ring
+  with `SlothStore` (per-type rings + `AlertHotIndex`).
+- The per-record field set in `SlothRecord` is a best-effort
+  interpretation of the sloth schema page; if sloth's writer uses
+  different JSON keys than guessed (e.g. `qname` vs `name`), update
+  the `CodingKeys` mapping. Decoding ignores unknown keys, so older
+  agents pulling future sloth fields stays safe.
+- Wire-level e2e in the iOS simulator should be folded into a
+  `xcodebuild test` UI test once M2 lands a stable on-screen
+  surface to assert against.
+
+### 2026-05-26 — Initial repo scaffolding
+**Commits**: *(initial commit)*
+**Touched**: `README.md`, `MISSION.md`, `CLAUDE.md`, `FACTORY.md`,
+`PROGRESS.md`, `.gitignore`, `Makefile`, `project.yml`,
+`Package.swift`, `docs/milestones.md`, `docs/dark-factory.md`,
+`docs/views/*`, `docs/wiki/*`, `Sources/SlothCore/*` (stubs),
+`Tests/SlothCoreTests/*` (stubs), `App/*` (stubs)
+**Why**: Sloth (the C99 passive network monitor) now emits a
+read-only JSONL stream over TCP via `--data-socket tcp:HOST:PORT`.
+This repo is the iOS / iPadOS client that consumes that stream over
+a Tailscale tailnet and renders the same panels sloth shows in its
+terminal UI, in SwiftUI, with Swift Charts graphs. The initial
+commit is dark-factory scaffolding: charter, working rules, build
+runbook, milestone roadmap, per-view UI specs, project skeleton.
+No working app yet — pre-M1.
+**Follow-ups**: M1 (Connection plumbing) is the first concrete
+build target; see `docs/milestones.md`.
+
+---
+

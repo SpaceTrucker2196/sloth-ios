@@ -74,9 +74,10 @@ of sloth's canonical constants. Checked `include/sloth.h`:
 **Verification**: `swift test` 193/193 (no test pins the defaults).
 **Follow-ups**:
 - The `_sloth._tcp` mDNS-publishing issue (2026-05-29 discovery
-  follow-up) still isn't filed on the sloth repo — the agent's
-  `gh issue create` was permission-gated. Draft is ready; needs a
-  human (or an allowed session) to post it.
+  follow-up) is now filed:
+  [sloth #29](https://github.com/SpaceTrucker2196/sloth/issues/29)
+  (operator-authorized). Local-network discovery lights up when it
+  closes.
 - Noticed while checking: sloth #5 (connection records) is closed —
   the M6 Flows band should light up against a current sloth build.
   Worth an end-to-end run over the tailnet.

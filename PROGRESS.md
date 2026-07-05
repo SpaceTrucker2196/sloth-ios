@@ -59,6 +59,26 @@ the commit hashes.
 
 ## Recently landed
 
+### 2026-07-04 — tools/fake-producer.py (repeatable render checks)
+**Commits**: *(this entry lands with the commit)*
+**Touched**: `tools/fake-producer.py`, `tools/README.md`.
+**Why**: The Tufte dashboard was verified against a scratch fake
+producer that died with the agent session. Checked in so any
+session (human or agent) can light up every view without a live
+sloth: `python3 tools/fake-producer.py`, connect the sim to
+`tcp:127.0.0.1:8765` (or seed the legacy profile key — recipe in
+the README — and let launch auto-connect dial it).
+
+**Scope note (MISSION §2)**: dev tool, not app code. Python 3
+stdlib only, listens on loopback only, never imported by the app,
+nothing ships. The app remains read-only; the tool exists so the
+*verification* discipline ("manual run in the simulator before
+committing") is repeatable rather than bespoke per session.
+
+**Follow-ups**: none. If sloth's schema grows fields, update the
+producer alongside `SlothRecord` or the new band renders its quiet
+row during checks.
+
 ### 2026-07-04 — ICMPLogView (dashboard drill-in follow-up)
 **Commits**: *(this entry lands with the commit)*
 **Touched**:

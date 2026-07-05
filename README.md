@@ -29,8 +29,22 @@ JA3 fingerprint tallies.
 
 ## Status
 
-Pre-M1. Repo scaffolding only. See [`docs/milestones.md`](docs/milestones.md)
-for the roadmap.
+v1.0 shipped — all milestones M1–M8 landed (see
+[`docs/milestones.md`](docs/milestones.md)): connection plumbing,
+`SlothStore`, alerts, top hosts, DNS/TLS/HTTP logs, connections + RTT,
+the iPad composite dashboard, and profiles/reconnect polish. Post-v1
+work has since wired the full sloth snapshot record set (devices,
+packets, processes, interfaces, wifi_ap/wifi_sta, deauth,
+mdns_service, dhcp_lease) into dedicated views.
+
+Two features are built but dark, waiting on the producer:
+
+- **Connections view** — populates when sloth emits
+  `{"type":"connections", …}` ([sloth #5](https://github.com/SpaceTrucker2196/sloth/issues/5)).
+- **Local-network discovery** — populates when sloth publishes
+  `_sloth._tcp.` via Bonjour (see [`docs/wiki/discovery.md`](docs/wiki/discovery.md)).
+
+See [`PROGRESS.md`](PROGRESS.md) for the full change log.
 
 ## Cold start (for agents and humans)
 

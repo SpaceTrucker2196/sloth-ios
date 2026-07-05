@@ -6,3 +6,4 @@
 | d8a4057 | 2026-07-05T03:58:43Z | claude-fable-5 | 30 | 8434 | 3966737 | 6810 | 4.5249 | Check in tools/fake-producer + README |
 | a7f98b1 | 2026-07-05T05:49:50Z | claude-fable-5 | 946 | 43931 | 11121854 | 1040672 | 34.1413 | RingSizes cross-check vs include/sloth.h |
 | 0fbb5ae | 2026-07-05T05:58:34Z | claude-fable-5 | 163 | 9728 | 4904980 | 10196 | 5.5969 | File sloth#29 (mDNS publish) + PROGRESS link |
+| 89122cb | 2026-07-05T13:23:20Z | claude-fable-5 | 30 | 12267 | 4408804 | 11235 | 5.2472 | Lean AGENTS.md adoption + PROGRESS archive |

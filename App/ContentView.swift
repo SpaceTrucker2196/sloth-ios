@@ -38,11 +38,10 @@ struct ContentView: View {
                     onDiagnostics: { showDiagnostics = true }
                 )
                 SystemPulseChip(
-                    state:           store.connectionState,
-                    recordsReceived: store.recordsReceived,
-                    critCount:       severityCount(.crit),
-                    warnCount:       severityCount(.warn),
-                    lowCount:        severityCount(.low)
+                    state:     store.connectionState,
+                    critCount: severityCount(.crit),
+                    warnCount: severityCount(.warn),
+                    lowCount:  severityCount(.low)
                 )
             } else {
                 ProgressView().padding()
@@ -56,6 +55,16 @@ struct ContentView: View {
                     profileStore: profileStore,
                     log:          log
                 )
+                // Auto-dial the saved active profile on launch. Same
+                // trust boundary as the M8 reconnect loop — the
+                // operator already committed this endpoint; a
+                // dashboard should come up showing data, not a
+                // Connect button. Fresh installs (no profile) still
+                // wait for explicit input.
+                if profileStore.activeProfile != nil {
+                    log.info("app", "auto-connecting to active profile on launch")
+                    coordinator?.connect()
+                }
             }
         }
         .onChange(of: scenePhase) { _, phase in

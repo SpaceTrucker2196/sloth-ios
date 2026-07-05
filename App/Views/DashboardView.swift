@@ -1,12 +1,25 @@
-// DashboardView — iPad-first composite. M7 shipped a 2×2 grid;
-// M6 adds Connections, bumping the layout to 3×2 (Alerts, Top
-// hosts, DNS, TLS, Connections, HTTP). Mirrors sloth's static TUI
-// composite — no pinch, no drag, no per-card reorder. iPhone falls
-// back to the TabView in ContentView.
+// DashboardView — iPad Tufte band composite. Supersedes the M7 tile
+// grid: instead of six full interactive views in cards, the board is
+// a vertical stack of dense read-only bands mirroring sloth's TUI
+// dashboard (`src/views/dashboard.c`), worst news highest:
 //
-// Each tile embeds the production view (M3–M6) inside its own
-// NavigationStack so push destinations (alert detail, host detail,
-// flow detail) still work from within the tile.
+//   Interfaces + Summary
+//   CRITICAL (full width, eye level)
+//   Connections + Top hosts
+//   WiFi | Roaming | Beacons
+//   mDNS | DHCP | SSDP
+//   ARP | Deauth
+//   DNS | ICMP
+//   Packets (tail)
+//
+// Tap a band title to push the full view — the TUI's Enter-to-drill.
+// The board forces dark mode on true black; the phosphor palette is
+// designed for it. iPhone keeps the TabView in ContentView.
+//
+// Spec: docs/views/dashboard.md. Band/panel implementations mirror
+// sloth's file split: DashboardBands.swift (wide bands),
+// DashboardGrid.swift (thirds/halves), DashboardPrimitives.swift
+// (band frame + row atoms).
 
 import SwiftUI
 import SlothCore
@@ -14,43 +27,58 @@ import SlothCore
 struct DashboardView: View {
 
     var body: some View {
-        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-            GridRow {
-                tile(title: "ALERTS", icon: "exclamationmark.triangle", tint: .alertHotCrit) {
-                    NavigationStack { AlertsView() }
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    IfaceSummaryBand()
+                    CritAlertsBand()
+                    ConnsHostsBand()
+                    HStack(alignment: .top, spacing: 10) {
+                        WiFiPanel(); ColumnRule()
+                        RoamingPanel(); ColumnRule()
+                        BeaconPanel()
+                    }
+                    HStack(alignment: .top, spacing: 10) {
+                        MDNSPanel(); ColumnRule()
+                        DHCPPanel(); ColumnRule()
+                        SSDPPanel()
+                    }
+                    HStack(alignment: .top, spacing: 10) {
+                        ARPPanel(); ColumnRule()
+                        DeauthPanel()
+                    }
+                    HStack(alignment: .top, spacing: 10) {
+                        DNSLogPanel(); ColumnRule()
+                        ICMPLogPanel()
+                    }
+                    PacketsBand()
                 }
-                tile(title: "TOP HOSTS", icon: "globe.americas", tint: .phosphorTeal) {
-                    NavigationStack { TopHostsView() }
-                }
+                .padding(14)
             }
-            GridRow {
-                tile(title: "DNS", icon: "questionmark.bubble", tint: .phosphorBright) {
-                    NavigationStack { DNSLogView() }
-                }
-                tile(title: "TLS", icon: "lock", tint: .phosphorTeal) {
-                    NavigationStack { TLSLogView() }
-                }
-            }
-            GridRow {
-                tile(title: "FLOWS", icon: "point.3.connected.trianglepath.dotted", tint: .phosphorBright) {
-                    NavigationStack { ConnectionsView() }
-                }
-                tile(title: "HTTP", icon: "globe", tint: .phosphorTeal) {
-                    NavigationStack { HTTPLogView() }
-                }
-            }
+            .background(Color.black)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: DashboardRoute.self, destination: drill)
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.colorScheme, .dark)
     }
 
     @ViewBuilder
-    private func tile<C: View>(
-        title: String,
-        icon: String,
-        tint: Color,
-        @ViewBuilder content: @escaping () -> C
-    ) -> some View {
-        DashboardCard(title: title, systemImage: icon, tint: tint, content: content)
+    private func drill(_ route: DashboardRoute) -> some View {
+        switch route {
+        case .interfaces:  InterfacesView()
+        case .alerts:      AlertsView()
+        case .connections: ConnectionsView()
+        case .topHosts:    TopHostsView()
+        case .wifi:        WiFiView()
+        case .lan:         LANView()
+        case .twins:       TwinsView()
+        case .dns:         DNSLogView()
+        case .packets:     PacketsView()
+        }
     }
+}
+
+#Preview {
+    DashboardView()
+        .environment(SlothStore())
 }

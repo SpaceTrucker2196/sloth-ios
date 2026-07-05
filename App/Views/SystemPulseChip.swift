@@ -5,8 +5,13 @@
 // M7 spec: "shows connection state pill, records-per-second
 // counter, total-CRIT count, total-WARN count, total-LOW count".
 //
-// rec/s is computed from the store's `recordsReceived` total —
-// view-local timer samples the delta every second.
+// rec/s samples the store's `recordsReceived` delta once per second
+// from a `.task` loop. The loop must read the store (a reference)
+// rather than a captured parameter, and the clock must not live on
+// the view struct: under live load the chip re-renders many times a
+// second, and a `Timer.publish` stored in a struct property is
+// re-created (and its 1 s tick reset) on every render — the readout
+// sat at 0.0/s exactly when records were flowing.
 
 import SwiftUI
 import SlothCore
@@ -14,14 +19,12 @@ import SlothCore
 struct SystemPulseChip: View {
 
     let state: SlothStore.ConnectionState
-    let recordsReceived: Int
     let critCount: Int
     let warnCount: Int
     let lowCount:  Int
 
-    @State private var lastSample: (count: Int, at: Date) = (0, .distantPast)
+    @Environment(SlothStore.self) private var store
     @State private var ratePerSecond: Double = 0
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 10) {
@@ -39,13 +42,14 @@ struct SystemPulseChip: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
-        .onReceive(tick) { now in
-            let delta = recordsReceived - lastSample.count
-            let elapsed = now.timeIntervalSince(lastSample.at)
-            if lastSample.at != .distantPast, elapsed > 0 {
-                ratePerSecond = Double(delta) / elapsed
+        .task {
+            var last = store.recordsReceived
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                let now = store.recordsReceived
+                ratePerSecond = Double(now - last)
+                last = now
             }
-            lastSample = (recordsReceived, now)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(a11y)

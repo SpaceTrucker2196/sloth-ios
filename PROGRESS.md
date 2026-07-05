@@ -59,6 +59,68 @@ the commit hashes.
 
 ## Recently landed
 
+### 2026-07-04 — iPad Tufte band dashboard (supersedes M7 tile grid)
+**Commits**: *(this entry lands with the commit)*
+**Touched**:
+- `docs/views/dashboard.md` — spec rewritten for the band layout.
+- `Sources/SlothCore/DashboardRoster.swift` — pure row-selection
+  helpers (`newest` with stable id tie-break, `critAlerts`,
+  `topHosts`, `packetTail`, `logTail`). Views only render.
+- `Tests/SlothCoreTests/DashboardRosterTests.swift` — 12 hermetic
+  tests (sorting, tie-breaks, caps, empty/zero-limit edges).
+  185/185 total green.
+- `App/Views/DashboardView.swift` — rewritten orchestrator. The M7
+  3×2 grid of embedded tab views (six sets of chrome, six scroll
+  views) is replaced by sloth's own TUI dashboard shape
+  (`src/views/dashboard.c`): dense read-only bands, worst news
+  highest — Interfaces+Summary / CRITICAL / Connections+Top hosts /
+  WiFi|Roaming|Beacons / mDNS|DHCP|SSDP / ARP|Deauth / DNS|ICMP /
+  Packets. Tap a band title to push the full view. Forces dark on
+  true black.
+- `App/Views/DashboardBands.swift`, `DashboardGrid.swift`,
+  `DashboardPrimitives.swift` — band/panel implementations,
+  mirroring sloth's dashboard file split. Hairline rules, small-caps
+  titles with inline counts, monospaced numerals, alert-hot IPs,
+  brand hues, heat-graded signal strength. Top-host sparklines are
+  heat-graded against the *panel's* max (per the charts convention)
+  so ink intensity ranks the small multiples.
+- `App/Views/DashboardCard.swift` — **deleted** (tile grid retired).
+- `App/ContentView.swift` — auto-connects the saved active profile
+  on launch (same trust boundary as the M8 reconnect loop; fresh
+  installs still wait for explicit input).
+- `App/Views/SystemPulseChip.swift` — **bug fix**: the rec/s readout
+  stored `Timer.publish(...).autoconnect()` on the view struct, so
+  under live load every re-render re-created the timer and the 1 s
+  tick never fired — 0.0/s exactly when records were flowing. Now
+  samples `store.recordsReceived` from a stable `.task` loop.
+
+**Verification**:
+- `swift test` — 185/185 (173 pre-existing + 12 roster).
+- `xcodebuild build` — iPad Pro 13-inch (M5) + iPhone 17 Pro
+  simulators, warning-clean.
+- Manual: fed the board from a scratch fake-JSONL producer
+  (127.0.0.1:8765, every record type, sinusoidal rates). All bands
+  populate; CRIT band shows red-striped rows with hot IPs; pulse
+  chip reads a real rec/s; sparklines animate; drill-in pushes the
+  full views.
+
+**Why**: The M7 dashboard tiled six full interactive views — heavy
+chrome, low data density. sloth's TUI composite is already the
+Tufte answer: small multiples, word-sized sparklines, hairline
+structure, direct labels, drill-in on demand. The iPad has the
+pixels for the whole band stack; now it uses them.
+
+**Follow-ups**:
+- ICMP has no dedicated drill-in view; the ICMP panel title is the
+  only non-navigable one. Add an ICMP log view if operators want it.
+- Landscape puts the thirds rows at very generous widths; a 2×-wide
+  column split for DNS|ICMP on ultra-wide Stage Manager windows is a
+  possible refinement.
+- The fake producer script used for verification lives in the agent
+  scratchpad only — a checked-in `tools/fake-producer` would make
+  render checks repeatable (needs a MISSION §2 think: it's a dev
+  tool, not app code).
+
 ### 2026-05-29 — Local-network discovery (Bonjour)
 **Commits**: *(this entry lands with the commit)*
 **Touched**:

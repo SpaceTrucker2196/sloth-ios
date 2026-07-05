@@ -59,6 +59,28 @@ the commit hashes.
 
 ## Recently landed
 
+### 2026-07-05 — Ring caps cross-checked against sloth (M2 follow-up)
+**Commits**: *(this entry lands with the commit)*
+**Touched**: `Sources/SlothCore/RingSizes.swift`.
+**Why**: The M2 defaults were best-effort guesses pending a check
+of sloth's canonical constants. Checked `include/sloth.h`:
+`MAX_{DNS,TLS,QUIC,HTTP,NTP,ICMP}_LOG = 256`, `MAX_ALERTS = 128`,
+`MAX_PACKETS = 256`, `MAX_CONNS = 1024`. Six defaults drifted
+(dns/tls/http 1024→256, quic 512→256, ntp 128→**256** — we were
+*under*, packets 1024→256); icmp + alerts already matched. The
+`connections` ring (2048) intentionally stays: it holds flow
+*history* for RTT sparklines, not the active-flow table
+`MAX_CONNS` caps, and the doc comment now says so.
+**Verification**: `swift test` 193/193 (no test pins the defaults).
+**Follow-ups**:
+- The `_sloth._tcp` mDNS-publishing issue (2026-05-29 discovery
+  follow-up) still isn't filed on the sloth repo — the agent's
+  `gh issue create` was permission-gated. Draft is ready; needs a
+  human (or an allowed session) to post it.
+- Noticed while checking: sloth #5 (connection records) is closed —
+  the M6 Flows band should light up against a current sloth build.
+  Worth an end-to-end run over the tailnet.
+
 ### 2026-07-04 — tools/fake-producer.py (repeatable render checks)
 **Commits**: *(this entry lands with the commit)*
 **Touched**: `tools/fake-producer.py`, `tools/README.md`.

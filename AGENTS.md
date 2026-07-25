@@ -169,3 +169,5 @@ substantive commit: run `~/.claude/billing/ledger.py --append --summary
 commit. Never hand-author, estimate, or rewrite rows (append-only); if
 the script can't produce a row, stop and surface it. See
 `ledger.py --help` for flags (`--dry-run`, `--commit <sha>`).
+
+Energy (optional, read-only): `~/.claude/billing/ledger.py --energy-total` estimates the rough datacenter kWh behind the whole ledger; `--energy` adds a per-row estimate. Order-of-magnitude only.

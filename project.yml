@@ -79,6 +79,11 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"   # iPhone + iPad
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        # Device signing for physical installs (river.io llc team).
+        # Automatic signing lets -allowProvisioningUpdates mint the
+        # App ID + profile and register a new device on first build.
+        DEVELOPMENT_TEAM: U3Z59VXPUB
+        CODE_SIGN_STYLE: Automatic
     dependencies:
       - package: SlothCore
         product: SlothCore

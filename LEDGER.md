@@ -8,3 +8,4 @@
 | 0fbb5ae | 2026-07-05T05:58:34Z | claude-fable-5 | 163 | 9728 | 4904980 | 10196 | 5.5969 | File sloth#29 (mDNS publish) + PROGRESS link |
 | 89122cb | 2026-07-05T13:23:20Z | claude-fable-5 | 30 | 12267 | 4408804 | 11235 | 5.2472 | Lean AGENTS.md adoption + PROGRESS archive |
 | 6774bb7 | 2026-11-13T20:03:43Z | claude-fable-5-1,claude-opus-4-8 | 352 | 191039 | 21504462 | 395685 | 20.9028 | iOS sensor post + fleet radar: SensorRecord/PostService/FleetStore + Radar/Post  |
+| 1f249da | 2026-11-13T20:31:28Z | claude-opus-4-8 | 106 | 40917 | 11325009 | 49991 | 7.1859 | Set automatic device signing (river.io team); build+install sloth to Voice Of En |

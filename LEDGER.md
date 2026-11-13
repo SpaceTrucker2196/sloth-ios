@@ -11,3 +11,4 @@
 | 1f249da | 2026-11-13T20:31:28Z | claude-opus-4-8 | 106 | 40917 | 11325009 | 49991 | 7.1859 | Set automatic device signing (river.io team); build+install sloth to Voice Of En |
 | 25fb054 | 2026-11-13T20:41:49Z | claude-opus-4-8 | 76 | 34463 | 8956229 | 33596 | 5.6760 | RSSI->approx distance (log-distance path loss) on radar/roster/post; #205 tailne |
 | 68edb55 | 2026-11-13T22:07:48Z | claude-opus-4-8 | 174 | 122196 | 23014586 | 1136113 | 25.9242 | Metal PPI radar renderer (MTKView): rings, sweep, RSSI-ranged blips |
+| 1523c51 | 2026-11-13T22:11:48Z | claude-opus-4-8 | 50 | 23499 | 7945985 | 20916 | 4.7699 | Radar: metre-scaled radial axis, range+bearing labels, pinch-zoom |

@@ -57,7 +57,7 @@ private struct RadarScope: View {
                     .fill(color(for: blip.rssi))
                     .frame(width: 8, height: 8)
                     .position(position(for: blip))
-                    .accessibilityLabel(Text("contact \(blip.rssi) dBm"))
+                    .accessibilityLabel(Text(label(for: blip)))
             }
 
             if blips.isEmpty {
@@ -71,6 +71,13 @@ private struct RadarScope: View {
     private func position(for blip: RadarBlip) -> CGPoint {
         let r = side / 2
         return CGPoint(x: r + blip.x * r, y: r - blip.y * r)
+    }
+
+    private func label(for blip: RadarBlip) -> String {
+        if let d = blip.distanceM {
+            return String(format: "contact %d dBm, about %.1f metres", blip.rssi, d)
+        }
+        return "contact \(blip.rssi) dBm"
     }
 
     private func color(for rssi: Int) -> Color {
@@ -105,6 +112,11 @@ private struct PostRoster: View {
                     Text("\(post.orderedContacts.count)")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(Color.phosphorTeal)
+                    if let d = nearest(post) {
+                        Text(String(format: "~%.1fm", d))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(Color.phosphorBright)
+                    }
                     if let h = post.headingDeg {
                         Text("\(Int(h))°").font(.caption2).foregroundStyle(Color.phosphorDim)
                     }
@@ -112,5 +124,11 @@ private struct PostRoster: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func nearest(_ post: FleetPost) -> Double? {
+        post.orderedContacts
+            .compactMap { FleetRadar.approxDistanceMeters(rssi: $0.rssi) }
+            .min()
     }
 }

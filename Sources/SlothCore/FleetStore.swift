@@ -127,6 +127,7 @@ public final class FleetStore {
                     range: base.range,
                     angleDeg: base.angleDeg,
                     rssi: base.rssi,
+                    distanceM: base.distanceM,
                     label: base.label))
             }
         }

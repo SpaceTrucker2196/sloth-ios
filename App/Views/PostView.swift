@@ -33,6 +33,9 @@ struct PostView: View {
                     row("Hubs reading", "\(post.serviceStatus.clientCount)")
                     row("BLE scan", post.bleAuthorized ? "on" : "off / denied")
                     row("Contacts", "\(post.contactCount)")
+                    if let d = post.nearestContactMeters {
+                        row("Nearest", String(format: "~%.1f m", d))
+                    }
                     if let h = post.headingDeg { row("Heading", "\(Int(h))°") }
                     if let f = post.fieldMagUT { row("Mag field", String(format: "%.1f µT", f)) }
                     if let reason = post.radioScanReason {

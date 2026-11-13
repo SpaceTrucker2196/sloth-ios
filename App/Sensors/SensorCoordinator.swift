@@ -47,6 +47,7 @@ public final class SensorCoordinator: NSObject {
     public private(set) var identity: PostIdentity
     public private(set) var bleAuthorized = false
     public private(set) var contactCount = 0
+    public private(set) var nearestContactMeters: Double?
     public private(set) var headingDeg: Double?
     public private(set) var fieldMagUT: Double?
     public private(set) var radioScanReason: String?
@@ -116,6 +117,7 @@ public final class SensorCoordinator: NSObject {
         sampleMotion()
         buffer.evictStaleContacts(now: nowTS(), ttl: 60)
         contactCount = buffer.contactCount
+        refreshNearest()
         refreshWiFi()
         pushHeartbeat()
         refreshSnapshotMirror()
@@ -224,6 +226,14 @@ public final class SensorCoordinator: NSObject {
 
     // MARK: - Helpers
 
+
+    private func refreshNearest() {
+        let dists = buffer.bleContacts.compactMap {
+            FleetRadar.approxDistanceMeters(rssi: $0.rssi)
+        }
+        nearestContactMeters = dists.min()
+    }
+
     fileprivate func nowTS() -> Int { Int(Date().timeIntervalSince1970) }
 }
 
@@ -259,6 +269,7 @@ extension SensorCoordinator: CBCentralManagerDelegate {
                 name: name, rssi: rssi, txPower: tx,
                 services: services, vendor: nil, count: 1)))
             contactCount = buffer.contactCount
+            refreshNearest()
             refreshSnapshotMirror()
         }
     }

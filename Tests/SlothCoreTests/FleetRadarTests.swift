@@ -36,6 +36,27 @@ final class FleetRadarTests: XCTestCase {
         XCTAssertEqual(right.y, 0, accuracy: 0.0001)
     }
 
+    func testApproxDistanceModel() {
+        // At the 1m reference power, distance ≈ 1 metre.
+        let oneM = try! XCTUnwrap(FleetRadar.approxDistanceMeters(rssi: -59))
+        XCTAssertEqual(oneM, 1, accuracy: 0.05)
+        // Weaker signal => farther.
+        let near = try! XCTUnwrap(FleetRadar.approxDistanceMeters(rssi: -50))
+        let far  = try! XCTUnwrap(FleetRadar.approxDistanceMeters(rssi: -80))
+        XCTAssertLessThan(near, oneM)   // stronger than ref → under 1m
+        XCTAssertGreaterThan(far, oneM)
+        XCTAssertGreaterThan(far, near)
+        // Non-negative RSSI is unusable → nil.
+        XCTAssertNil(FleetRadar.approxDistanceMeters(rssi: 0))
+    }
+
+    func testBlipCarriesDistance() {
+        let c = BLEContactEntry(ts: 1, post: "p", addr: "A", rssi: -59)
+        let blip = FleetRadar.blip(for: c)
+        XCTAssertNotNil(blip.distanceM)
+        XCTAssertEqual(blip.distanceM!, 1, accuracy: 0.05)
+    }
+
     func testBearingOverridesHashedAngle() {
         let c = BLEContactEntry(ts: 1, post: "p", addr: "A", rssi: -50)
         let blip = FleetRadar.blip(for: c, bearingDeg: 123)

@@ -134,6 +134,72 @@ public final class FleetStore {
         return out
     }
 
+    // MARK: - Fleet geometry (triangulation)
+
+    public struct FleetGeometry: Sendable, Equatable {
+        public struct PostMarker: Sendable, Equatable, Identifiable {
+            public let id: String
+            public let name: String
+            public let x: Double   // ENU east metres from the origin post
+            public let y: Double   // ENU north metres
+        }
+        public struct LocatedContact: Sendable, Equatable, Identifiable {
+            public var id: String { addr }
+            public let addr: String
+            public let x: Double
+            public let y: Double
+            public let anchors: Int
+            public let coarse: Bool
+            public let label: String?
+        }
+        public let posts: [PostMarker]
+        public let located: [LocatedContact]
+        public let locatedAddrs: Set<String>
+    }
+
+    /// Place located posts and any contact heard by 2+ of them on a
+    /// local metre grid, origin at the first located post. Needs posts
+    /// that share their position (`geo_fix`); a lone post yields empty
+    /// geometry. This is the data behind the radar's triangulated
+    /// markers.
+    public func fleetGeometry(now: Int) -> FleetGeometry {
+        let geoPosts = roster.filter { isOnline($0, now: now) && $0.geo != nil }
+        guard let origin = geoPosts.first, let o = origin.geo else {
+            return FleetGeometry(posts: [], located: [], locatedAddrs: [])
+        }
+        var markers: [FleetGeometry.PostMarker] = []
+        var postENU: [String: (x: Double, y: Double)] = [:]
+        for p in geoPosts {
+            guard let g = p.geo else { continue }
+            let e = GeoProjection.enu(lat: g.lat, lon: g.lon, lat0: o.lat, lon0: o.lon)
+            markers.append(.init(id: p.id, name: p.name, x: e.x, y: e.y))
+            postENU[p.id] = e
+        }
+        // addr → every (post, rssi) that heard it.
+        var hearers: [String: [(pid: String, rssi: Int)]] = [:]
+        for p in geoPosts {
+            for c in p.orderedContacts {
+                hearers[c.addr, default: []].append((p.id, c.rssi))
+            }
+        }
+        var located: [FleetGeometry.LocatedContact] = []
+        var addrs: Set<String> = []
+        for (addr, hs) in hearers where hs.count >= 2 {
+            let anchors = hs.compactMap { h -> Multilateration.Anchor? in
+                guard let e = postENU[h.pid],
+                      let d = FleetRadar.approxDistanceMeters(rssi: h.rssi) else { return nil }
+                return Multilateration.Anchor(x: e.x, y: e.y, r: d)
+            }
+            guard let fix = Multilateration.solve(anchors) else { continue }
+            let name = geoPosts.compactMap { $0.contacts[addr]?.name }.first
+            located.append(.init(addr: addr, x: fix.x, y: fix.y,
+                                 anchors: fix.anchors, coarse: fix.coarse, label: name))
+            addrs.insert(addr)
+        }
+        located.sort { $0.addr < $1.addr }
+        return FleetGeometry(posts: markers, located: located, locatedAddrs: addrs)
+    }
+
     public func prune(now: Int, hardTTL: Int) {
         for (id, post) in posts where now - post.lastHeard > hardTTL {
             posts.removeValue(forKey: id)

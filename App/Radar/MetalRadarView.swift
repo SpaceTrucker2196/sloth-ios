@@ -11,6 +11,7 @@ struct MetalRadarView: UIViewRepresentable {
     let blips: [RadarBlip]
     let reduceMotion: Bool
     var maxRangeMeters: Double = 30
+    var markers: [RadarRenderer.Marker] = []
 
     func makeCoordinator() -> RadarRenderer? {
         RadarRenderer(device: MTLCreateSystemDefaultDevice())
@@ -34,6 +35,7 @@ struct MetalRadarView: UIViewRepresentable {
         renderer.blips = blips
         renderer.reduceMotion = reduceMotion
         renderer.maxRangeMeters = maxRangeMeters
+        renderer.markers = markers
         if view.delegate == nil { view.delegate = renderer }
         // When motion is off, stop the frame clock and draw one still.
         view.isPaused = reduceMotion

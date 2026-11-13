@@ -23,8 +23,15 @@ import SlothCore
 @MainActor
 final class RadarRenderer: NSObject {
 
+    /// A pre-placed marker in radar clip space (-1…1 each axis), used
+    /// for post positions and triangulated contacts. SwiftUI computes
+    /// the position from the fleet's metre grid and the current range.
+    struct Marker: Equatable { var x: Float; var y: Float; var size: Float; var color: SIMD4<Float> }
+
     /// Contacts to plot. Set from SwiftUI; read on the next frame.
     var blips: [RadarBlip] = []
+    /// Post positions + triangulated contacts, already in clip space.
+    var markers: [Marker] = []
     /// Radians the sweep has advanced. Driven by the frame clock.
     private var sweep: Double = 0
     /// When true the sweep holds still (accessibility reduce-motion).
@@ -128,6 +135,12 @@ final class RadarRenderer: NSObject {
         }
     }
 
+    private func markerVertices() -> [Vertex] {
+        markers.map { m in
+            Vertex(pos: SIMD2(m.x, m.y), psize: m.size, color: m.color)
+        }
+    }
+
     private func pointSize(for rssi: Int) -> Float {
         switch rssi {
         case ..<(-85): return 7
@@ -186,6 +199,12 @@ extension RadarRenderer: MTKViewDelegate {
             enc.setVertexBytes(points, length: MemoryLayout<Vertex>.stride * points.count, index: 0)
             enc.setVertexBytes(&scale, length: MemoryLayout<Float>.stride, index: 1)
             enc.drawPrimitives(type: .point, vertexStart: 0, vertexCount: points.count)
+        }
+        let marks = markerVertices()
+        if !marks.isEmpty {
+            enc.setVertexBytes(marks, length: MemoryLayout<Vertex>.stride * marks.count, index: 0)
+            enc.setVertexBytes(&scale, length: MemoryLayout<Float>.stride, index: 1)
+            enc.drawPrimitives(type: .point, vertexStart: 0, vertexCount: marks.count)
         }
         enc.endEncoding()
         cmd.present(drawable)

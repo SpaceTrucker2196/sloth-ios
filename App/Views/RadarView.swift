@@ -15,16 +15,27 @@ import SlothCore
 struct RadarView: View {
 
     @Environment(FleetCoordinator.self) private var fleet
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var now = Int(Date().timeIntervalSince1970)
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height * 0.62)
+            let blips = fleet.fleet.fleetBlips(now: now)
             VStack(spacing: 12) {
-                RadarScope(blips: fleet.fleet.fleetBlips(now: now), side: side)
-                    .frame(width: side, height: side)
-                    .frame(maxWidth: .infinity)
+                ZStack {
+                    MetalRadarView(blips: blips, reduceMotion: reduceMotion)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.phosphorDim, lineWidth: 1))
+                    if blips.isEmpty {
+                        Text("no contacts")
+                            .font(.caption)
+                            .foregroundStyle(Color.phosphorDim)
+                    }
+                }
+                .frame(width: side, height: side)
+                .frame(maxWidth: .infinity)
                 PostRoster(fleet: fleet.fleet, now: now)
             }
             .padding()
@@ -32,61 +43,6 @@ struct RadarView: View {
         .navigationTitle("Radar")
         .onReceive(tick) { date in now = Int(date.timeIntervalSince1970) }
         .onAppear { fleet.start() }
-    }
-}
-
-private struct RadarScope: View {
-    let blips: [RadarBlip]
-    let side: CGFloat
-
-    var body: some View {
-        ZStack {
-            Circle().stroke(Color.phosphorDim, lineWidth: 1)
-            Circle().stroke(Color.phosphorDim.opacity(0.6), lineWidth: 1)
-                .scaleEffect(0.66)
-            Circle().stroke(Color.phosphorDim.opacity(0.6), lineWidth: 1)
-                .scaleEffect(0.33)
-            // Cross hairs.
-            Path { p in
-                p.move(to: CGPoint(x: side/2, y: 0)); p.addLine(to: CGPoint(x: side/2, y: side))
-                p.move(to: CGPoint(x: 0, y: side/2)); p.addLine(to: CGPoint(x: side, y: side/2))
-            }.stroke(Color.phosphorDim.opacity(0.4), lineWidth: 1)
-
-            ForEach(blips) { blip in
-                Circle()
-                    .fill(color(for: blip.rssi))
-                    .frame(width: 8, height: 8)
-                    .position(position(for: blip))
-                    .accessibilityLabel(Text(label(for: blip)))
-            }
-
-            if blips.isEmpty {
-                Text("no contacts")
-                    .font(.caption)
-                    .foregroundStyle(Color.phosphorDim)
-            }
-        }
-    }
-
-    private func position(for blip: RadarBlip) -> CGPoint {
-        let r = side / 2
-        return CGPoint(x: r + blip.x * r, y: r - blip.y * r)
-    }
-
-    private func label(for blip: RadarBlip) -> String {
-        if let d = blip.distanceM {
-            return String(format: "contact %d dBm, about %.1f metres", blip.rssi, d)
-        }
-        return "contact \(blip.rssi) dBm"
-    }
-
-    private func color(for rssi: Int) -> Color {
-        switch rssi {
-        case ..<(-85): return .heatLo
-        case ..<(-70): return .phosphorTeal
-        case ..<(-55): return .phosphorBright
-        default:       return .alertHotWarn   // very close
-        }
     }
 }
 

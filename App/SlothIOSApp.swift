@@ -18,6 +18,8 @@ struct SlothIOSApp: App {
     @State private var store        = SlothStore()
     @State private var profiles     = ProfileStore()
     @State private var log          = SlothLog()
+    @State private var post         = SensorCoordinator()
+    @State private var fleet        = FleetCoordinator()
 
     var body: some Scene {
         WindowGroup {
@@ -25,6 +27,8 @@ struct SlothIOSApp: App {
                 .environment(store)
                 .environment(profiles)
                 .environment(log)
+                .environment(post)
+                .environment(fleet)
                 .environment(\.font, .phosphor())
                 .tint(.phosphorBright)
                 .preferredColorScheme(.dark)

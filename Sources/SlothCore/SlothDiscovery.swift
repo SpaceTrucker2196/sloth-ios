@@ -65,19 +65,27 @@ public final class SlothDiscovery {
         case failed(reason: String)
     }
 
+    /// Default service type: a sloth instance's data socket. Pass
+    /// `_sloth-post._tcp.` to browse for iOS sensor posts instead
+    /// (same resolve path, different service family).
     public static let serviceType = "_sloth._tcp."
+    public static let postServiceType = "_sloth-post._tcp."
+
+    public let serviceType: String
 
     public private(set) var state: State = .idle
     public private(set) var services: [DiscoveredService] = []
 
     private var delegate: BrowserDelegate?
 
-    public init() {}
+    public init(serviceType: String = SlothDiscovery.serviceType) {
+        self.serviceType = serviceType
+    }
 
     public func start() {
         guard delegate == nil else { return }
         services = []
-        let d = BrowserDelegate(serviceType: Self.serviceType) { [weak self] event in
+        let d = BrowserDelegate(serviceType: serviceType) { [weak self] event in
             guard let self else { return }
             switch event {
             case .browsing:               self.state = .browsing

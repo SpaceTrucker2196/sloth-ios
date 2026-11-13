@@ -20,12 +20,16 @@ struct ContentView: View {
     @Environment(SlothStore.self)        private var store
     @Environment(ProfileStore.self)      private var profileStore
     @Environment(SlothLog.self)          private var log
+    @Environment(SensorCoordinator.self) private var post
+    @Environment(FleetCoordinator.self)  private var fleet
     @Environment(\.scenePhase)           private var scenePhase
     @Environment(\.horizontalSizeClass)  private var hSize
     @State private var coordinator: ConnectionCoordinator?
     @State private var showSettings    = false
     @State private var showDiagnostics = false
     @State private var showDiscovery   = false
+    @State private var showRadar       = false
+    @State private var showPost        = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,7 +39,9 @@ struct ContentView: View {
                     store: store,
                     onDiscover:    { showDiscovery = true },
                     onSettings:    { showSettings = true },
-                    onDiagnostics: { showDiagnostics = true }
+                    onDiagnostics: { showDiagnostics = true },
+                    onRadar:       { showRadar = true },
+                    onPost:        { showPost = true }
                 )
                 SystemPulseChip(
                     state:     store.connectionState,
@@ -77,6 +83,10 @@ struct ContentView: View {
             case .background:
                 log.info("app", "scene backgrounded — cancelling connect loop")
                 coordinator?.disconnect()
+                // MISSION §2(4): no background radios. Tear down the
+                // sensor post's server and the fleet browser too.
+                post.disable()
+                fleet.stop()
             default:
                 break
             }
@@ -96,6 +106,12 @@ struct ContentView: View {
             DiscoveryView()
                 .environment(profileStore)
                 .environment(log)
+        }
+        .sheet(isPresented: $showRadar) {
+            NavigationStack { RadarView() }
+        }
+        .sheet(isPresented: $showPost) {
+            NavigationStack { PostView() }
         }
     }
 
@@ -153,6 +169,12 @@ struct ContentView: View {
 
             NavigationStack { PacketsView() }
                 .tabItem { Label("Packets", systemImage: "rectangle.stack") }
+
+            NavigationStack { RadarView() }
+                .tabItem { Label("Radar", systemImage: "dot.radiowaves.forward") }
+
+            NavigationStack { PostView() }
+                .tabItem { Label("Post", systemImage: "antenna.radiowaves.left.and.right.circle") }
         }
     }
 
@@ -181,6 +203,8 @@ private struct ConnectionBar: View {
     let onDiscover:    () -> Void
     let onSettings:    () -> Void
     let onDiagnostics: () -> Void
+    let onRadar:       () -> Void
+    let onPost:        () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -218,6 +242,17 @@ private struct ConnectionBar: View {
                     onDiagnostics()
                 } label: {
                     Label("Diagnostics…", systemImage: "stethoscope")
+                }
+                Divider()
+                Button {
+                    onRadar()
+                } label: {
+                    Label("Fleet radar…", systemImage: "dot.radiowaves.forward")
+                }
+                Button {
+                    onPost()
+                } label: {
+                    Label("Sensor post…", systemImage: "antenna.radiowaves.left.and.right.circle")
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")

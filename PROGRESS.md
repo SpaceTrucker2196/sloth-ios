@@ -57,6 +57,17 @@ the commit hashes.
 
 ---
 
+## Landed
+
+### 2026-11-13 — iOS sensor post + fleet radar (producer role)
+**Commits**: this change (feat: iOS sensor post + fleet radar)
+**Touched**: `Sources/SlothCore/{SensorRecord,SensorBuffer,PostIdentity,PostService,PostClient,FleetStore,FleetRadar}.swift`, `SlothDiscovery.swift`; `App/Sensors/*`; `App/Views/{RadarView,PostView}.swift`; `App/{ContentView,SlothIOSApp}.swift`; `project.yml`, `App/Info.plist`; `MISSION.md`, `AGENTS.md`; `docs/wiki/post-protocol.md`, `docs/views/{radar,post}.md`; `Tests/SlothCoreTests/*`
+**Why**: Jeff asked for sloth-ios to also *be* a sloth client — a SIGINT post streaming its radios/sensors — plus a fleet Radar view, with sloth auto-discovering iOS posts. Implemented as the inverse of sloth's data socket: the device serves its own read-only JSONL stream and advertises `_sloth-post._tcp.`; a hub discovers and pulls it. MISSION §1/§2 rewritten for the producer role (still one-way, passive, in-memory, foreground-only).
+**Verified**: `swift test` 214/214 green; iPhone 17 Pro simulator build clean (exit 0), new files warning-free.
+**Follow-ups**: sloth C-side discovery/consume ([sloth #205](https://github.com/SpaceTrucker2196/sloth/issues/205)); "Access WiFi Information" entitlement for `wifi_self`; real private-radio scan behind `PrivateRadioProbe` (needs jailbreak / Apple-internal signing); on-device render-check of Radar + Post. Tracker: [sloth-ios #13](https://github.com/SpaceTrucker2196/sloth-ios/issues/13).
+
+---
+
 ## Current state (2026-07-05)
 
 - Read-only SwiftUI dashboard for sloth's JSONL data socket; all v1.0

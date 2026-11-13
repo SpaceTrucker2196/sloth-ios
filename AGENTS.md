@@ -6,11 +6,21 @@ roadmap in `docs/milestones.md`.
 
 ## What sloth-ios is
 
-A read-only iOS / iPadOS dashboard for the
+An iOS / iPadOS dashboard and passive sensor post for the
 [sloth](https://github.com/SpaceTrucker2196/sloth) passive network
 monitor. Connects over a Tailscale tailnet to sloth's read-only JSONL
 data socket and renders the same panels sloth shows in its terminal
 UI — in SwiftUI, with Swift Charts graphs.
+
+As a **post** it also serves its own read-only stream of what the
+device's radios and sensors hear (BLE advertisers, magnetometer,
+joined WiFi, coarse GPS), advertised over Bonjour as
+`_sloth-post._tcp.`. A sloth instance or another sloth-ios discovers
+the post and reads it the same way this app reads sloth. The Radar
+view shows the whole fleet. Both roles are one-way and passive — see
+`MISSION.md` §2. Producer code lives in `Sources/SlothCore`
+(`SensorRecord`, `SensorBuffer`, `PostService`, `PostClient`,
+`FleetStore`, `FleetRadar`, `PostIdentity`) and `App/Sensors/`.
 
 ## Architecture
 

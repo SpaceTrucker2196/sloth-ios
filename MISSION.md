@@ -19,19 +19,31 @@ not the manual.
 
 ## 1. Mission
 
-sloth-ios is a **read-only mobile dashboard** for the passive network
-monitor [sloth](https://github.com/SpaceTrucker2196/sloth). It
-connects over a Tailscale tailnet to a sloth instance's read-only
-JSONL data socket and renders the same panels sloth shows in its
-terminal UI — alerts, top hosts, DNS / TLS / HTTP logs, connections,
-devices — as native SwiftUI views with Swift Charts graphs.
+sloth-ios is a **mobile dashboard and sensor post** for the passive
+network monitor [sloth](https://github.com/SpaceTrucker2196/sloth). It
+has two roles, both passive:
 
-The goal is not to control sloth from a phone. The goal is to *see*
-what sloth sees, with a phone-shaped UX, from anywhere on the
-tailnet.
+1. **Window (consumer).** It connects over a Tailscale tailnet to a
+   sloth instance's read-only JSONL data socket and renders the same
+   panels sloth shows in its terminal UI — alerts, top hosts, DNS /
+   TLS / HTTP logs, connections, devices — as native SwiftUI views
+   with Swift Charts graphs.
 
-If a single sentence has to survive: **sloth-ios is a window, not a
-keyboard.**
+2. **Post (producer).** It can serve its *own* read-only stream of the
+   signals the device's radios and sensors hear — Bluetooth LE
+   advertisers, compass and magnetometer, the joined WiFi network,
+   coarse position — and advertise itself over Bonjour as
+   `_sloth-post._tcp.`. A fleet hub (a sloth instance, or another
+   sloth-ios) discovers the post and reads it, exactly like it reads
+   any other sloth stream. The Radar view shows the whole fleet's
+   contacts at once.
+
+Both roles are one-way. As a window, sloth-ios never commands sloth.
+As a post, sloth-ios never accepts commands from a hub — it only
+serves. The stream direction flips; the read-only contract does not.
+
+If a single sentence has to survive: **sloth-ios is a window and a
+sensor, never a keyboard.**
 
 ---
 
@@ -42,45 +54,59 @@ client. They are not preferences. If a proposed change violates any
 of them, the change does not land — find another way or close the
 issue.
 
-1. **Read-only over the wire.** The app never sends data to a sloth
-   instance. The TCP / UNIX-domain socket on the server is one-way
-   by contract; this client must respect that. No "clear alerts" RPC.
-   No "trigger capture" RPC. No write-back. The only TCP traffic the
-   app initiates is the initial `connect()` — after that, the socket
-   is read-only.
+1. **One-way, no verbs — both directions.** As a window, the app
+   never writes to a sloth instance: no "clear alerts" RPC, no
+   "trigger capture" RPC, no write-back. As a post, the app serves a
+   read-only stream and never reads a byte a hub sends: no inbound
+   commands, no config pulls, no handshake. Each socket carries
+   records in one direction only, the same contract sloth's own data
+   socket holds.
 
-2. **No telemetry.** No analytics SDKs (Firebase, Mixpanel, Sentry,
-   etc.). No crash reporters that phone home. No remote config. No
-   feature flags fetched from a server. The app's network surface is
-   exactly one endpoint: the user's sloth instance.
+2. **Passive sensors only.** The post observes; it never transmits on
+   any radio, never pairs, never associates, never probes, never
+   injects. BLE is scan-only. The one carve-out any producer may rely
+   on is reading the device's own sensors (compass, magnetometer,
+   joined-network identity, coarse GPS). A capability that would make
+   the device act on a signal, rather than report hearing it, does
+   not land.
 
-3. **Tailnet-only by default.** Connection profiles default to
-   reachability over Tailscale (100.64.0.0/10). The app does not
-   open ports, does not run a Bonjour responder, does not advertise
-   itself. The user supplies the bind address of their sloth
-   instance.
+3. **No telemetry.** No analytics SDKs (Firebase, Mixpanel, Sentry,
+   etc.). No crash reporters that phone home. No remote config, no
+   feature flags fetched from a server. Sensor records go only to a
+   hub the operator runs on their own tailnet — never to any
+   Anthropic, Apple-adjacent, or third-party endpoint.
 
-4. **No background network access.** When the app is backgrounded,
-   the socket is closed. iOS will reap it anyway when the app is
-   suspended; this rule just makes the intent explicit. Reconnect
-   happens on foregrounding.
+4. **Tailnet-local only.** The window connects to a sloth endpoint the
+   operator supplies, reachable over Tailscale (100.64.0.0/10) or the
+   LAN. The post advertises `_sloth-post._tcp.` and listens, but only
+   on the local link / tailnet, only while in the foreground, and
+   only after the operator turns it on. Serving is opt-in and off by
+   default. Access control is the operator's (bind scope, Tailscale
+   ACLs) — the stream carries no auth of its own, same as sloth's.
 
-5. **No persistence of forensic data.** The JSONL records sloth emits
-   describe other people's network activity. Caching that on the
-   phone creates a data-retention problem. The store is purely
-   in-memory; closing the app discards it. Connection profiles
-   (host:port) MAY be persisted in `UserDefaults`; nothing else.
+5. **No background radios.** When the app is backgrounded, every
+   socket closes and every sensor stops — the consumer stream, the
+   post's listener, the BLE scan, motion and location. iOS reaps them
+   anyway; this rule makes the intent explicit. They restart on
+   foregrounding.
 
-6. **Operator owns the consequences.** sloth-ios shows information.
-   What the operator does with that information — file an incident,
-   reconfigure an AP, walk away — is outside the app's scope. The
-   app does not nudge, recommend, or remediate.
+6. **No persistence of observations.** The records on either side
+   describe real devices and people around the operator. Caching them
+   creates a retention problem. Both the consumer store and the post
+   buffer are purely in-memory; closing the app discards them.
+   Connection profiles and the post's own identity (a random UUID +
+   name) MAY be persisted in `UserDefaults`; no record content, ever.
+
+7. **Operator owns the consequences.** sloth-ios shows and reports
+   information. What the operator does with it — file an incident,
+   reconfigure an AP, walk away — is outside the app's scope. The app
+   does not nudge, recommend, or remediate.
 
 If you are tempted to add a feature because it would be useful —
-push-notifications-on-CRIT, "clear alerts" button, sharing a chart to
-iMessage — stop. Either the feature violates a rule above (push
-needs a server; sharing leaks forensic data) or it belongs to a
-different tool.
+push-notifications-on-CRIT, a "clear alerts" button, a BLE connect to
+read a characteristic, writing captures to disk — stop. Either it
+breaks a rule above (push needs a server; connecting is not passive;
+disk is retention) or it belongs to a different tool.
 
 ---
 

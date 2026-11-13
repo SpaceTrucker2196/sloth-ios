@@ -56,13 +56,23 @@ targets:
           - UIInterfaceOrientationLandscapeRight
           - UIInterfaceOrientationPortraitUpsideDown
         ITSAppUsesNonExemptEncryption: false
-        # Bonjour service types this app browses (iOS 14+ requirement).
+        # Bonjour service types this app browses AND publishes (iOS
+        # 14+ requirement). `_sloth._tcp` = a sloth data socket this
+        # app reads; `_sloth-post._tcp` = a sensor post — published
+        # when this device serves as a post, browsed when it is the
+        # fleet viewer.
         NSBonjourServices:
           - _sloth._tcp
-        # Shown in the iOS "Local Network" permission prompt the first
-        # time discovery runs or the first time NWConnection tries a
-        # peer-to-peer TCP connect to a LAN address.
-        NSLocalNetworkUsageDescription: "Find sloth instances on your local network."
+          - _sloth-post._tcp
+        # Shown in the iOS "Local Network" prompt the first time
+        # discovery runs, the first time NWConnection makes a peer-to-
+        # peer connect, or the first time the post server advertises.
+        NSLocalNetworkUsageDescription: "Find sloth instances on your tailnet, and serve this device as a sensor post."
+        # Sensor-post permissions. Each degrades gracefully: a denied
+        # permission just means the matching record carries nulls.
+        NSBluetoothAlwaysUsageDescription: "Scan for nearby Bluetooth devices to report as radar contacts."
+        NSMotionUsageDescription: "Read the compass and magnetometer to orient radar contacts."
+        NSLocationWhenInUseUsageDescription: "Tag this sensor post with heading and, if you allow it, a coarse position."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.river.sloth.ios

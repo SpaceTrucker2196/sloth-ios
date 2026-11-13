@@ -1,9 +1,9 @@
-// RadarView — the fleet's-eye view. A phosphor PPI radar scope that
-// plots every contact every online post currently hears. Range rings
-// are RSSI bands (centre = right on top of a post, rim = barely
-// audible); each blip is a BLE contact placed by `FleetRadar`
-// geometry. Below the scope, a compact roster of the posts feeding
-// the picture.
+// RadarView — the fleet's-eye view. A Metal PPI radar scope that
+// plots every contact every online post currently hears. The radial
+// axis is estimated distance in metres (from BLE RSSI), so the range
+// rings carry metre labels; pinch to change how far the rim reaches.
+// Bearing labels mark N/E/S/W. Below the scope, a compact roster of
+// the posts feeding the picture.
 //
 // Read-only: this view shows what the fleet reports. It issues no
 // commands to any post.
@@ -17,7 +17,13 @@ struct RadarView: View {
     @Environment(FleetCoordinator.self) private var fleet
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var now = Int(Date().timeIntervalSince1970)
+    @State private var maxRange: Double = 30          // metres the rim reaches
+    @GestureState private var pinch: CGFloat = 1
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var effectiveRange: Double {
+        min(max(maxRange / Double(pinch), 5), 300)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -25,9 +31,11 @@ struct RadarView: View {
             let blips = fleet.fleet.fleetBlips(now: now)
             VStack(spacing: 12) {
                 ZStack {
-                    MetalRadarView(blips: blips, reduceMotion: reduceMotion)
+                    MetalRadarView(blips: blips, reduceMotion: reduceMotion,
+                                   maxRangeMeters: effectiveRange)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(Color.phosphorDim, lineWidth: 1))
+                    ScopeLabels(range: effectiveRange, side: side)
                     if blips.isEmpty {
                         Text("no contacts")
                             .font(.caption)
@@ -36,6 +44,13 @@ struct RadarView: View {
                 }
                 .frame(width: side, height: side)
                 .frame(maxWidth: .infinity)
+                .gesture(
+                    MagnificationGesture()
+                        .updating($pinch) { value, state, _ in state = value }
+                        .onEnded { value in
+                            maxRange = min(max(maxRange / Double(value), 5), 300)
+                        }
+                )
                 PostRoster(fleet: fleet.fleet, now: now)
             }
             .padding()
@@ -43,6 +58,43 @@ struct RadarView: View {
         .navigationTitle("Radar")
         .onReceive(tick) { date in now = Int(date.timeIntervalSince1970) }
         .onAppear { fleet.start() }
+    }
+}
+
+/// Bearing + range labels drawn over the Metal scope. Text is cheaper
+/// and crisper in SwiftUI than in the shader, and it never rotates
+/// with the sweep.
+private struct ScopeLabels: View {
+    let range: Double      // metres at the rim
+    let side: CGFloat
+
+    var body: some View {
+        let c = side / 2
+        let r = side / 2
+        ZStack {
+            bearing("N", CGPoint(x: c, y: 10))
+            bearing("S", CGPoint(x: c, y: side - 10))
+            bearing("E", CGPoint(x: side - 12, y: c))
+            bearing("W", CGPoint(x: 12, y: c))
+            ForEach([1.0/3.0, 2.0/3.0, 1.0], id: \.self) { frac in
+                Text(rangeLabel(range * frac))
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(Color.phosphorDim)
+                    .position(x: c + 18, y: c - CGFloat(frac) * r + 7)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func bearing(_ s: String, _ p: CGPoint) -> some View {
+        Text(s)
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundStyle(Color.phosphorTeal)
+            .position(p)
+    }
+
+    private func rangeLabel(_ m: Double) -> String {
+        m < 10 ? String(format: "%.1fm", m) : String(format: "%.0fm", m)
     }
 }
 

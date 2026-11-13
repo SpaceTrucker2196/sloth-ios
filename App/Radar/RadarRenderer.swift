@@ -31,6 +31,9 @@ final class RadarRenderer: NSObject {
     var reduceMotion = false
     /// Zoom factor: 1 shows range 0…1 to the rim; >1 magnifies.
     var zoom: Float = 1
+    /// Metres the rim represents. A contact's radius is its estimated
+    /// distance over this, so the rings carry real range labels.
+    var maxRangeMeters: Double = 30
 
     private let device: any MTLDevice
     private let queue: any MTLCommandQueue
@@ -109,9 +112,19 @@ final class RadarRenderer: NSObject {
 
     private func pointVertices() -> [Vertex] {
         blips.map { b in
-            Vertex(pos: SIMD2(Float(b.x), Float(b.y)),
-                   psize: pointSize(for: b.rssi),
-                   color: color(for: b.rssi))
+            // Radius from estimated distance when known, so a blip sits
+            // on the ring that matches its metres; fall back to the
+            // RSSI-normalised range when distance is unknown.
+            let radius: Float
+            if let d = b.distanceM {
+                radius = Float(min(1.0, d / max(1, maxRangeMeters)))
+            } else {
+                radius = Float(b.range)
+            }
+            let a = Float(b.angleDeg) * .pi / 180
+            return Vertex(pos: SIMD2(radius * sin(a), radius * cos(a)),
+                          psize: pointSize(for: b.rssi),
+                          color: color(for: b.rssi))
         }
     }
 

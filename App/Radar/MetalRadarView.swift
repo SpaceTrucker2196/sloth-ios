@@ -10,6 +10,7 @@ import SlothCore
 struct MetalRadarView: UIViewRepresentable {
     let blips: [RadarBlip]
     let reduceMotion: Bool
+    var maxRangeMeters: Double = 30
 
     func makeCoordinator() -> RadarRenderer? {
         RadarRenderer(device: MTLCreateSystemDefaultDevice())
@@ -32,6 +33,7 @@ struct MetalRadarView: UIViewRepresentable {
         guard let renderer = context.coordinator else { return }
         renderer.blips = blips
         renderer.reduceMotion = reduceMotion
+        renderer.maxRangeMeters = maxRangeMeters
         if view.delegate == nil { view.delegate = renderer }
         // When motion is off, stop the frame clock and draw one still.
         view.isPaused = reduceMotion

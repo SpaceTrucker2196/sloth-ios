@@ -18,6 +18,7 @@ struct RadarView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var now = Int(Date().timeIntervalSince1970)
     @State private var maxRange: Double = 30          // metres the rim reaches
+    @State private var showPeers = false
     @GestureState private var pinch: CGFloat = 1
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -91,6 +92,17 @@ struct RadarView: View {
             .padding()
         }
         .navigationTitle("Radar")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showPeers = true } label: {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                }
+                .accessibilityLabel("Fleet peers")
+            }
+        }
+        .sheet(isPresented: $showPeers) {
+            PeersView(peers: fleet.peers)
+        }
         .onReceive(tick) { date in now = Int(date.timeIntervalSince1970) }
         .onAppear { fleet.start() }
     }

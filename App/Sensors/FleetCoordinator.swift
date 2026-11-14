@@ -16,6 +16,7 @@ import SlothCore
 public final class FleetCoordinator {
 
     public let fleet: FleetStore
+    public let peers: PostPeerStore
     public private(set) var browsing = false
     public private(set) var knownPosts: [DiscoveredService] = []
 
@@ -24,8 +25,9 @@ public final class FleetCoordinator {
     private var streams: [String: Task<Void, Never>] = [:]
     private var observeTask: Task<Void, Never>?
 
-    public init(fleet: FleetStore = FleetStore()) {
+    public init(fleet: FleetStore = FleetStore(), peers: PostPeerStore = PostPeerStore()) {
         self.fleet = fleet
+        self.peers = peers
     }
 
     public func start() {
@@ -35,7 +37,14 @@ public final class FleetCoordinator {
         // Poll the discovery roster and open a stream per new service.
         observeTask = Task { @MainActor in
             while !Task.isCancelled {
-                syncStreams(with: discovery.services)
+                // Local-link posts (Bonjour) plus tailnet posts the
+                // operator added by address. mDNS stops at the link;
+                // the manual list is how a roaming post over Tailscale
+                // gets pulled.
+                var targets: [String: ConnectionProfile] = [:]
+                for svc in discovery.services { targets["bonjour:\(svc.id)"] = svc.profile }
+                for p in peers.peers { targets["peer:\(p.uri)"] = p }
+                syncStreams(with: targets)
                 knownPosts = discovery.services
                 try? await Task.sleep(for: .seconds(2))
             }
@@ -50,20 +59,19 @@ public final class FleetCoordinator {
         streams.removeAll()
     }
 
-    private func syncStreams(with services: [DiscoveredService]) {
-        let liveIDs = Set(services.map(\.id))
-        // Drop streams whose service vanished.
-        for (id, task) in streams where !liveIDs.contains(id) {
-            task.cancel(); streams.removeValue(forKey: id)
+    private func syncStreams(with targets: [String: ConnectionProfile]) {
+        let liveKeys = Set(targets.keys)
+        // Drop streams whose target vanished.
+        for (key, task) in streams where !liveKeys.contains(key) {
+            task.cancel(); streams.removeValue(forKey: key)
         }
-        // Open a stream for each newly-seen service.
-        for svc in services where streams[svc.id] == nil {
-            streams[svc.id] = openStream(svc)
+        // Open a stream for each newly-seen target.
+        for (key, profile) in targets where streams[key] == nil {
+            streams[key] = openStream(profile)
         }
     }
 
-    private func openStream(_ svc: DiscoveredService) -> Task<Void, Never> {
-        let profile = svc.profile
+    private func openStream(_ profile: ConnectionProfile) -> Task<Void, Never> {
         let client = client
         let fleet = fleet
         return Task { @MainActor in

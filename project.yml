@@ -83,7 +83,15 @@ targets:
         # Automatic signing lets -allowProvisioningUpdates mint the
         # App ID + profile and register a new device on first build.
         DEVELOPMENT_TEAM: U3Z59VXPUB
-        CODE_SIGN_STYLE: Automatic
+        # Manual signing with the portal-made "sloth ios dev" profile
+        # on the io.river.sloth.ios App ID, which carries the Access
+        # WiFi Information capability (wifi_self SSID/BSSID). Manual
+        # because this Mac's command-line Xcode has no account to
+        # auto-provision with.
+        CODE_SIGN_STYLE: Manual
+        PROVISIONING_PROFILE_SPECIFIER: "sloth ios dev"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_ENTITLEMENTS: App/SlothIOS.entitlements
     dependencies:
       - package: SlothCore
         product: SlothCore

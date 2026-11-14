@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Lets NEHotspotNetwork.fetchCurrent read the joined network's
+	     SSID/BSSID (wifi_self), gated by the user's Location grant.
+	     Requires the "Access WiFi Information" capability enabled on
+	     the App ID io.river.sloth.ios in the developer portal. -->
+	<key>com.apple.developer.networking.wifi-info</key>
+	<true/>
+</dict>
+</plist>

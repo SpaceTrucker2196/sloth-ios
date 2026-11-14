@@ -13,3 +13,4 @@
 | 68edb55 | 2026-11-13T22:07:48Z | claude-opus-4-8 | 174 | 122196 | 23014586 | 1136113 | 25.9242 | Metal PPI radar renderer (MTKView): rings, sweep, RSSI-ranged blips |
 | 1523c51 | 2026-11-13T22:11:48Z | claude-opus-4-8 | 50 | 23499 | 7945985 | 20916 | 4.7699 | Radar: metre-scaled radial axis, range+bearing labels, pinch-zoom |
 | b53e49e | 2026-11-13T22:28:34Z | claude-opus-4-8 | 70 | 62571 | 11797388 | 61658 | 8.0799 | Fleet triangulation: GeoProjection + Multilateration + fleetGeometry; radar mark |
+| 105c3bf | 2026-11-14T00:03:14Z | claude-opus-4-8 | 266 | 71827 | 50386660 | 1261837 | 39.6087 | WiFi-info entitlement + dedicated App ID/profile + manual signing |

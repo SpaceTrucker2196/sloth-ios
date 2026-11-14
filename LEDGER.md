@@ -14,3 +14,4 @@
 | 1523c51 | 2026-11-13T22:11:48Z | claude-opus-4-8 | 50 | 23499 | 7945985 | 20916 | 4.7699 | Radar: metre-scaled radial axis, range+bearing labels, pinch-zoom |
 | b53e49e | 2026-11-13T22:28:34Z | claude-opus-4-8 | 70 | 62571 | 11797388 | 61658 | 8.0799 | Fleet triangulation: GeoProjection + Multilateration + fleetGeometry; radar mark |
 | 105c3bf | 2026-11-14T00:03:14Z | claude-opus-4-8 | 266 | 71827 | 50386660 | 1261837 | 39.6087 | WiFi-info entitlement + dedicated App ID/profile + manual signing |
+| c5069c1 | 2026-11-14T01:18:58Z | claude-opus-4-8 | 132 | 66019 | 27471898 | 1393360 | 29.3207 | Tailnet post peers: PostPeerStore + FleetCoordinator manual pull + PeersView |

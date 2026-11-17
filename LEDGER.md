@@ -16,3 +16,4 @@
 | 105c3bf | 2026-11-14T00:03:14Z | claude-opus-4-8 | 266 | 71827 | 50386660 | 1261837 | 39.6087 | WiFi-info entitlement + dedicated App ID/profile + manual signing |
 | c5069c1 | 2026-11-14T01:18:58Z | claude-opus-4-8 | 132 | 66019 | 27471898 | 1393360 | 29.3207 | Tailnet post peers: PostPeerStore + FleetCoordinator manual pull + PeersView |
 | e95f691 | 2026-11-17T20:43:35Z | claude-opus-5-5 | 210 | 78051 | 13305270 | 278194 | 6.4485 | Alert lifecycle + sensor_health/socket_gap decode, fix dropped live alerts (#16, |
+| 167b1a9 | 2026-11-17T20:54:08Z | claude-fable-5-1,claude-opus-5-5 | 228 | 56888 | 12515436 | 1155878 | 25.7878 | sloth-rf second stream, refused-connect hint, backoff fix (#15); --since previou |

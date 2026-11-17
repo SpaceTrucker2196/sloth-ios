@@ -59,6 +59,13 @@ the commit hashes.
 
 ## Landed
 
+### 2026-11-17 — Second stream for sloth-rf; refused-connect hint
+**Commits**: this change
+**Touched**: `Sources/SlothCore/{ConnectionHint,ProfileStore,SlothStore}.swift`; `App/ConnectionCoordinator.swift`, `App/Views/{SettingsView,SensorHealthStrip}.swift`; `tools/fake-producer.py` (`--rf`); `Tests/SlothCoreTests/RFStreamTests.swift`
+**Why**: #15 — since sloth's #216 cutover (jsonl 2.0.0) GNSS / ADS-B / APRS / rtl_433 / Victron are only on sloth-rf's own socket. A profile now holds an optional RF endpoint; the coordinator runs a second connect loop into the same store with its own connection state, so one daemon down never reads as the other. A refused connect names the sensor-side `--data-socket tcp:… --data-socket-allow-remote` flags. Both loops now back off 1→30 s while failing (they reset before every attempt, so the delay never grew).
+**Verified**: `make test` exit 0 (249 core tests + app tests), zero warnings. iPhone 17 Pro sim with two fake producers: Diagnostics shows `RF jsonl 2.3.0` and "RF stream live"; with the RF port closed it shows the refused hint and retries at 1, 2, 4 s.
+**Follow-ups**: RF record types still decode to `.unknown` (#14). Profile edits apply on the next Connect, not live.
+
 ### 2026-11-17 — Alert lifecycle, sensor health, live alert decode
 **Commits**: this change
 **Touched**: `Sources/SlothCore/{HealthRecords,SlothRecord,SlothStore}.swift`; `App/Views/{SensorHealthStrip,AlertRowView,AlertsView,DiagnosticsView}.swift`, `App/ContentView.swift`; `tools/fake-producer.py`; `Tests/SlothCoreTests/HealthRecordTests.swift`

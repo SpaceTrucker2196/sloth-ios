@@ -69,6 +69,11 @@ struct SettingsView: View {
                     Text(p.profile.uri)
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
+                    if let rf = p.rf {
+                        Text("rf " + rf.uri)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 if p.id == profiles.activeID {
@@ -116,6 +121,7 @@ struct ProfileEditor: View {
 
     @State private var name: String = ""
     @State private var uri:  String = "tcp:host.tailnet:7777"
+    @State private var rfURI: String = ""
     @State private var parseError: String?
 
     var body: some View {
@@ -138,6 +144,18 @@ struct ProfileEditor: View {
                             .foregroundStyle(.red)
                     }
                 }
+                Section {
+                    TextField("tcp:HOST:PORT (optional)", text: $rfURI)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        .font(.body.monospaced())
+                } header: {
+                    Text("RF stream (sloth-rf)")
+                } footer: {
+                    Text("GNSS, ADS-B, APRS, rtl_433 and Victron come from sloth-rf's own socket. " +
+                         "Leave empty if the sensor runs no sloth-rf.")
+                }
             }
             .navigationTitle(mode == .add ? "New profile" : "Edit profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -157,6 +175,7 @@ struct ProfileEditor: View {
         if case .edit(let p) = mode {
             name = p.name
             uri  = p.profile.uri
+            rfURI = p.rf?.uri ?? ""
         }
     }
 
@@ -165,11 +184,20 @@ struct ProfileEditor: View {
             parseError = "Invalid URI — expected tcp:HOST:PORT"
             return
         }
+        let rfTrimmed = rfURI.trimmingCharacters(in: .whitespaces)
+        var rf: ConnectionProfile?
+        if !rfTrimmed.isEmpty {
+            guard let parsed = ConnectionProfile(uri: rfTrimmed) else {
+                parseError = "Invalid RF URI — expected tcp:HOST:PORT"
+                return
+            }
+            rf = parsed
+        }
         switch mode {
         case .add:
-            profiles.add(name: name, profile: profile)
+            profiles.add(name: name, profile: profile, rf: rf)
         case .edit(let original):
-            profiles.update(NamedProfile(id: original.id, name: name, profile: profile))
+            profiles.update(NamedProfile(id: original.id, name: name, profile: profile, rf: rf))
         }
         dismiss()
     }

@@ -160,6 +160,13 @@ public final class SlothStore {
     public private(set) var connectionState: ConnectionState = .idle
     public private(set) var lastError: String?
 
+    /// The optional `sloth-rf` stream (#15). Its records land in the
+    /// same rings; only its connection state is kept apart, so an RF
+    /// outage never reads as the Wi-Fi sensor going down.
+    public private(set) var rfConnectionState: ConnectionState = .idle
+    public private(set) var rfRecordsReceived: Int = 0
+    public private(set) var rfLastError: String?
+
     public let sizes:    RingSizes
     public let alertHot: AlertHotIndex
 
@@ -178,6 +185,19 @@ public final class SlothStore {
     // MARK: - Ingest
 
     public func ingest(_ record: SlothRecord) {
+        route(record)
+        recordsReceived += 1
+        if connectionState != .connected { connectionState = .connected }
+    }
+
+    /// One record off the `sloth-rf` stream.
+    public func ingestRF(_ record: SlothRecord) {
+        route(record)
+        rfRecordsReceived += 1
+        if rfConnectionState != .connected { rfConnectionState = .connected }
+    }
+
+    private func route(_ record: SlothRecord) {
         switch record {
         case .dns  (let e): append(e, into: \.dns,  cap: sizes.dns)
         case .tls  (let e): append(e, into: \.tls,  cap: sizes.tls)
@@ -216,8 +236,6 @@ public final class SlothStore {
         case .unknown:             unknownCount += 1
         case .malformed:           malformedCount += 1
         }
-        recordsReceived += 1
-        if connectionState != .connected { connectionState = .connected }
     }
 
     /// Drive the store from a `SlothClient` stream. Returns when the
@@ -236,10 +254,36 @@ public final class SlothStore {
         } catch is CancellationError {
             connectionState = .idle
         } catch {
-            let reason = error.localizedDescription
+            let reason = ConnectionHint.describe(error)
             lastError = reason
             connectionState = .disconnected(reason: reason)
         }
+    }
+
+    /// Drive the RF side from a second `SlothClient` stream.
+    public func ingest(
+        rfStream stream: AsyncThrowingStream<SlothRecord, any Error>
+    ) async {
+        rfLastError = nil
+        rfConnectionState = .connecting
+        do {
+            for try await record in stream {
+                ingestRF(record)
+            }
+            rfConnectionState = .disconnected(reason: nil)
+        } catch is CancellationError {
+            rfConnectionState = .idle
+        } catch {
+            let reason = ConnectionHint.describe(error)
+            rfLastError = reason
+            rfConnectionState = .disconnected(reason: reason)
+        }
+    }
+
+    /// The RF stream was turned off or the profile has none.
+    public func markRFIdle() {
+        rfConnectionState = .idle
+        rfLastError = nil
     }
 
     /// Reset all rings and counters. Used by tests and (eventually)
@@ -291,6 +335,9 @@ public final class SlothStore {
         sensorHealth.removeAll()
         socketDroppedTotal = 0
         recordsReceived = 0
+        rfRecordsReceived = 0
+        rfConnectionState = .idle
+        rfLastError = nil
         connectionState = .idle
         lastError = nil
         alertHot.clear()

@@ -19,10 +19,7 @@ struct SensorHealthStrip: View {
             ForEach(store.sensorHealth.keys.sorted(), id: \.self) { daemon in
                 if let h = store.sensorHealth[daemon] { DaemonLine(health: h) }
             }
-            if store.sensorHealth.count == 1, store.sensorHealth["rf"] == nil {
-                Text("RF stream not connected: no GNSS, ADS-B, APRS, rtl_433, Victron.")
-                    .foregroundStyle(.secondary)
-            }
+            rfLine
             counters
         }
         .font(.caption.monospaced())
@@ -30,6 +27,27 @@ struct SensorHealthStrip: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
+    }
+
+    /// The sloth-rf stream: say which state it is in, so empty RF
+    /// panels never read as "nothing in the air".
+    @ViewBuilder private var rfLine: some View {
+        switch store.rfConnectionState {
+        case .idle:
+            if store.sensorHealth["rf"] == nil {
+                Text("RF stream not configured (Settings → profile → RF stream): " +
+                     "no GNSS, ADS-B, APRS, rtl_433, Victron.")
+                    .foregroundStyle(.secondary)
+            }
+        case .connecting:
+            Text("RF stream connecting…").foregroundStyle(.secondary)
+        case .connected:
+            Text("RF stream live · \(store.rfRecordsReceived) records")
+                .foregroundStyle(.secondary)
+        case .disconnected(let reason):
+            Text("RF stream down: \(reason ?? "closed by sensor")")
+                .foregroundStyle(Color.alertHotWarn)
+        }
     }
 
     @ViewBuilder private var counters: some View {

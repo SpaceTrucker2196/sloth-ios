@@ -21,6 +21,7 @@ final class ConnectionCoordinator {
     var parseError: String?
 
     private var task: Task<Void, Never>?
+    private var rfTask: Task<Void, Never>?
     private let client:        SlothClient
     private let store:         SlothStore
     private let profileStore:  ProfileStore
@@ -78,6 +79,14 @@ final class ConnectionCoordinator {
         task = Task { [weak self] in
             await self?.runConnectLoop(profile: profile, reconnector: reconnector)
         }
+        // The sloth-rf stream, when the profile names one (#15). Its
+        // own loop and backoff: either daemon can be down alone.
+        if let rf = profileStore.activeProfile?.rf {
+            let rfReconnector = Reconnector()
+            rfTask = Task { [weak self] in
+                await self?.runRFLoop(profile: rf, reconnector: rfReconnector)
+            }
+        }
     }
 
     /// User-initiated disconnect. Cancels the active task; the
@@ -85,9 +94,30 @@ final class ConnectionCoordinator {
     func disconnect() {
         task?.cancel()
         task = nil
+        rfTask?.cancel()
+        rfTask = nil
+        store.markRFIdle()
     }
 
     // MARK: - Internals
+
+    private func runRFLoop(profile: ConnectionProfile, reconnector: Reconnector) async {
+        log.info("net", "rf stream: connecting to \(profile.uri)")
+        while !Task.isCancelled {
+            let before = store.rfRecordsReceived
+            await store.ingest(rfStream: client.records(for: profile))
+            // Back off from 1 s to 30 s while refused; start over only
+            // after an attempt that actually delivered records.
+            if store.rfRecordsReceived > before { await reconnector.reset() }
+            if Task.isCancelled { break }
+            if let err = store.rfLastError { log.warn("net", "rf stream: \(err)") }
+            do {
+                try await reconnector.waitForNextAttempt()
+            } catch {
+                break
+            }
+        }
+    }
 
     private func runConnectLoop(profile: ConnectionProfile, reconnector: Reconnector) async {
         log.info("net", "connect requested for \(profile.uri)")
@@ -96,7 +126,7 @@ final class ConnectionCoordinator {
         // a non-Sendable closure boundary.
         let log = self.log
         while !Task.isCancelled {
-            await reconnector.reset()
+            let before = store.recordsReceived
             let stream = client.records(
                 for: profile,
                 onWireFormatMismatch: { fmt in
@@ -109,6 +139,7 @@ final class ConnectionCoordinator {
                 }
             )
             await store.ingest(stream: stream)
+            if store.recordsReceived > before { await reconnector.reset() }
             log.info("net", "stream ended in state \(store.connectionState)")
             if Task.isCancelled { break }
             do {

@@ -18,11 +18,18 @@ public struct NamedProfile: Sendable, Codable, Equatable, Hashable, Identifiable
     public let id: UUID
     public var name: String
     public var profile: ConnectionProfile
+    /// Optional second endpoint for the `sloth-rf` daemon's stream
+    /// (GNSS, ADS-B, APRS, rtl_433, Victron). Since sloth's #216
+    /// cutover (jsonl 2.0.0) none of those records are on the
+    /// Wi-Fi daemon's stream. Absent in profiles saved before this.
+    public var rf: ConnectionProfile?
 
-    public init(id: UUID = UUID(), name: String, profile: ConnectionProfile) {
+    public init(id: UUID = UUID(), name: String, profile: ConnectionProfile,
+                rf: ConnectionProfile? = nil) {
         self.id = id
         self.name = name
         self.profile = profile
+        self.rf = rf
     }
 }
 
@@ -49,8 +56,9 @@ public final class ProfileStore {
     }
 
     @discardableResult
-    public func add(name: String, profile: ConnectionProfile) -> NamedProfile {
-        let p = NamedProfile(name: name, profile: profile)
+    public func add(name: String, profile: ConnectionProfile,
+                    rf: ConnectionProfile? = nil) -> NamedProfile {
+        let p = NamedProfile(name: name, profile: profile, rf: rf)
         profiles.append(p)
         if activeID == nil { activeID = p.id }
         persist()

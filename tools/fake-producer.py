@@ -137,13 +137,24 @@ def batch(t, tick):
                   "tx_rate":2.0e4*w(7,i),"rx_rate":1.7e5*w(6,i),"ports":[443]})
     return r
 
+def rf_batch(t, tick):
+    """sloth-rf's stream: its own sensor_health plus RF records."""
+    now = int(t)
+    r = [{"type":"gnss_fix","ts":now,"mode":3,"sats_used":9}]
+    if tick % 5 == 0:
+        r.append({"type":"sensor_health","ts":now,"evictions":0,"storage_failures":0,
+                  "storage_jsonl_failures":0,"daemon":"rf","db_max_mb":-1,"jsonl_version":"2.3.0"})
+    return r
+
+RF = False
+
 async def handle(reader, writer):
     peer = writer.get_extra_info("peername")
     print("client connected:", peer, flush=True)
     tick = 0
     try:
         while True:
-            lines = "".join(json.dumps(rec) + "\n" for rec in batch(time.time(), tick))
+            lines = "".join(json.dumps(rec) + "\n" for rec in (rf_batch if RF else batch)(time.time(), tick))
             writer.write(lines.encode())
             await writer.drain()
             tick += 1
@@ -160,4 +171,7 @@ async def main(port):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", type=int, default=8765)
-    asyncio.run(main(ap.parse_args().port))
+    ap.add_argument("--rf", action="store_true", help="act as sloth-rf (use --port 8766)")
+    args = ap.parse_args()
+    RF = args.rf
+    asyncio.run(main(args.port))

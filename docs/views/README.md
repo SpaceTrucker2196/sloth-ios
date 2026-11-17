@@ -32,6 +32,7 @@ One file per top-level SwiftUI view. Each covers:
 | M7 | Dashboard          | [dashboard.md](dashboard.md) |
 | M8 | Settings / Profiles| [settings.md](settings.md) |
 | M8 | Diagnostics        | [diagnostics.md](diagnostics.md) |
+| —  | RF (sloth-rf)      | [rf.md](rf.md) |
 
 ## Spec template
 

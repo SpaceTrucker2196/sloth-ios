@@ -140,7 +140,26 @@ def batch(t, tick):
 def rf_batch(t, tick):
     """sloth-rf's stream: its own sensor_health plus RF records."""
     now = int(t)
-    r = [{"type":"gnss_fix","ts":now,"mode":3,"sats_used":9}]
+    r = [{"type":"gnss_fix","ts":now,"mode":3,"nsat":14,"usat":9,"hdop":0.9,
+          "lat":44.97770,"lon":-93.26500,"alt_m":256.1,"jam":12}]
+    if tick % 10 == 0:
+        r += [
+          {"type":"adsb_aircraft","ts":now,"hex":"a8f00e","state":"live","flight":"SWA1234","squawk":"3412",
+           "emergency":"none","on_ground":0,"alt_baro":36000,"gs":451,"last_seen":now},
+          {"type":"adsb_aircraft","ts":now,"hex":"a1b2c3","state":"live","flight":"N123AB","squawk":"7700",
+           "emergency":"general","on_ground":0,"alt_baro":4500,"gs":118,"last_seen":now},
+          {"type":"adsb_aircraft","ts":now,"hex":"ac04d2","state":"live","flight":"","on_ground":1,"last_seen":now},
+          {"type":"aprs_station","ts":now,"call":"KD0ABC-9","state":"live","packets":14,"heard_direct":1,
+           "comment":"mobile, 146.52","last_seen":now},
+          {"type":"aprs_station","ts":now,"call":"W0XYZ","state":"live","packets":3,"heard_direct":0,
+           "status":"digi","last_seen":now-120},
+          {"type":"rtl433_device","ts":now,"model":"Acurite-Tower","id":1234,"channel":"A",
+           "temperature_C":21.4,"humidity":48,"battery_ok":1,"last_seen":now},
+          {"type":"rtl433_device","ts":now,"model":"Oregon-THGR122N","id":"0x1f","channel":2,
+           "temperature_F":70.1,"battery_ok":0,"last_seen":now-30},
+          {"type":"victron_device","ts":now,"mac":"c0:ff:ee:00:00:01","model":"SmartShunt",
+           "voltage_v":13.21,"soc_pct":87,"last_seen":now},
+        ]
     if tick % 5 == 0:
         r.append({"type":"sensor_health","ts":now,"evictions":0,"storage_failures":0,
                   "storage_jsonl_failures":0,"daemon":"rf","db_max_mb":-1,"jsonl_version":"2.3.0"})

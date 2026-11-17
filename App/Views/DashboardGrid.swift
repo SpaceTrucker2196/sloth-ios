@@ -316,3 +316,59 @@ struct ICMPLogPanel: View {
         }
     }
 }
+
+// MARK: - RF (Aircraft | RF sensors) — sloth-rf stream
+
+struct AircraftPanel: View {
+
+    @Environment(SlothStore.self) private var store
+
+    var body: some View {
+        let rows = Array(RFRoster.aircraft(store.aircraft.values).prefix(gridRowCap))
+        let emergency = store.aircraft.values.contains(where: \.hasEmergency)
+        GridPanel(title: "AIRCRAFT", count: store.aircraft.count, route: .rf,
+                  tint: emergency ? .alertHotCrit : .phosphorDim,
+                  quiet: "no ADS-B", isEmpty: rows.isEmpty) {
+            ForEach(rows) { a in
+                HStack(spacing: 6) {
+                    Text(a.flight.flatMap { $0.isEmpty ? nil : $0 } ?? a.hex).dashIdentity()
+                    if a.hasEmergency {
+                        Text((a.emergency ?? "").uppercased())
+                            .font(.phosphor(.caption2, weight: .bold))
+                            .foregroundStyle(.alertHotCrit)
+                    }
+                    Spacer(minLength: 4)
+                    Text(a.onGround == 1 ? "gnd" : a.altBaro.map { "\(Int($0))ft" } ?? "—").dashValue()
+                }
+                .lineLimit(1)
+            }
+        }
+    }
+}
+
+struct RFSensorsPanel: View {
+
+    @Environment(SlothStore.self) private var store
+
+    var body: some View {
+        let lines = summary
+        GridPanel(title: "RF", count: nil, route: .rf,
+                  quiet: store.rfConnectionState == .connected ? "no RF rows yet" : "no RF stream",
+                  isEmpty: lines.isEmpty) {
+            ForEach(lines, id: \.self) { line in
+                Text(line).dashValue().lineLimit(1)
+            }
+        }
+    }
+
+    private var summary: [String] {
+        var out: [String] = []
+        if let f = store.gnssFix {
+            out.append("GNSS \(f.modeName)" + (f.usat.map { " · \($0) used" } ?? ""))
+        }
+        if !store.aprsStations.isEmpty { out.append("APRS \(store.aprsStations.count) stations") }
+        if !store.rtl433Devices.isEmpty { out.append("433 \(store.rtl433Devices.count) sensors") }
+        if !store.victronDevices.isEmpty { out.append("Victron \(store.victronDevices.count)") }
+        return out
+    }
+}

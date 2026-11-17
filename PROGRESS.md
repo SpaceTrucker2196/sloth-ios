@@ -59,6 +59,13 @@ the commit hashes.
 
 ## Landed
 
+### 2026-11-17 — RF view: GNSS, ADS-B, APRS, rtl_433, Victron
+**Commits**: this change
+**Touched**: `Sources/SlothCore/{RFRecords,RFRoster,SlothRecord,SlothStore}.swift`; `App/Views/{RFView,DashboardView,DashboardGrid,DashboardPrimitives}.swift`, `App/ContentView.swift`; `docs/views/{rf,README}.md`; `tools/fake-producer.py`; `Tests/SlothCoreTests/RFRecordTests.swift`
+**Why**: #14 RF slice. The sloth-rf stream (#15) now fills tables: `gnss_fix`, `adsb_aircraft` and `aprs_station` (a `gone` record removes the row), `rtl433_device` (id read as number or text; readings kept in their native unit), `victron_device` (incl. 2.1.0 AC values). New RF tab on iPhone; `AIRCRAFT | RF` band on the iPad dashboard drills into it. ADS-B emergencies sort first and paint crit.
+**Verified**: `make test` exit 0 (258 core tests + app tests), zero warnings. iPhone 17 Pro sim, `-showRF` against both fake producers: GNSS, three aircraft (7700 first, red), two APRS stations, sub-GHz rows render. Victron row and the iPad band covered by tests only, not screenshotted.
+**Follow-ups**: #14 still open for `gnss_sky`, `gnss_sat`, `aprs_packet`, `sys_status`, `source_status`, `sensor`, Wi-Fi extras and flow records.
+
 ### 2026-11-17 — Second stream for sloth-rf; refused-connect hint
 **Commits**: this change
 **Touched**: `Sources/SlothCore/{ConnectionHint,ProfileStore,SlothStore}.swift`; `App/ConnectionCoordinator.swift`, `App/Views/{SettingsView,SensorHealthStrip}.swift`; `tools/fake-producer.py` (`--rf`); `Tests/SlothCoreTests/RFStreamTests.swift`

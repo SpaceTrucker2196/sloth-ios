@@ -51,6 +51,11 @@ public enum SlothRecord: Sendable, Equatable {
     case alertEvent(AlertEventEntry)
     case sensorHealth(SensorHealthEntry)
     case socketGap(SocketGapEntry)
+    case gnssFix(GNSSFixEntry)
+    case adsbAircraft(ADSBAircraftEntry)
+    case aprsStation(APRSStationEntry)
+    case rtl433Device(RTL433DeviceEntry)
+    case victronDevice(VictronDeviceEntry)
     case unknown(type: String, ts: Int)
     /// A known `type` whose body did not decode. Counted, never
     /// dropped silently: a field sloth stopped sending must show up.
@@ -92,6 +97,11 @@ public enum SlothRecord: Sendable, Equatable {
         case .alertEvent  (let e): return e.ts
         case .sensorHealth(let e): return e.ts
         case .socketGap   (let e): return e.ts
+        case .gnssFix      (let e): return e.ts
+        case .adsbAircraft (let e): return e.ts
+        case .aprsStation  (let e): return e.ts
+        case .rtl433Device (let e): return e.ts
+        case .victronDevice(let e): return e.ts
         case .unknown(_, let ts):   return ts
         case .malformed(_, let ts): return ts
         }
@@ -133,6 +143,11 @@ public enum SlothRecord: Sendable, Equatable {
         case .alertEvent(let e): return e.type
         case .sensorHealth: return "sensor_health"
         case .socketGap:    return "socket_gap"
+        case .gnssFix:       return "gnss_fix"
+        case .adsbAircraft:  return "adsb_aircraft"
+        case .aprsStation:   return "aprs_station"
+        case .rtl433Device:  return "rtl433_device"
+        case .victronDevice: return "victron_device"
         case .unknown(let t, _):   return t
         case .malformed(let t, _): return t
         }
@@ -198,6 +213,11 @@ extension SlothRecord: Decodable {
                             r = .alertEvent  (try AlertEventEntry  (from: decoder))
         case "sensor_health": r = .sensorHealth(try SensorHealthEntry(from: decoder))
         case "socket_gap":    r = .socketGap   (try SocketGapEntry   (from: decoder))
+        case "gnss_fix":       r = .gnssFix      (try GNSSFixEntry      (from: decoder))
+        case "adsb_aircraft":  r = .adsbAircraft (try ADSBAircraftEntry (from: decoder))
+        case "aprs_station":   r = .aprsStation  (try APRSStationEntry  (from: decoder))
+        case "rtl433_device":  r = .rtl433Device (try RTL433DeviceEntry (from: decoder))
+        case "victron_device": r = .victronDevice(try VictronDeviceEntry(from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             r = .unknown(type: tag, ts: ts)
@@ -243,6 +263,11 @@ extension SlothRecord: Encodable {
         case .alertEvent  (let e): try e.encode(to: encoder)
         case .sensorHealth(let e): try e.encode(to: encoder)
         case .socketGap   (let e): try e.encode(to: encoder)
+        case .gnssFix      (let e): try e.encode(to: encoder)
+        case .adsbAircraft (let e): try e.encode(to: encoder)
+        case .aprsStation  (let e): try e.encode(to: encoder)
+        case .rtl433Device (let e): try e.encode(to: encoder)
+        case .victronDevice(let e): try e.encode(to: encoder)
         case .unknown(let t, let ts), .malformed(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)

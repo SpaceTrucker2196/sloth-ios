@@ -30,6 +30,7 @@ struct ContentView: View {
     @State private var showDiscovery   = false
     @State private var showRadar       = false
     @State private var showPost        = false
+    @State private var showRFDebug     = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,6 +78,9 @@ struct ContentView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showDiagnostics") {
                     showDiagnostics = true
                 }
+                if ProcessInfo.processInfo.arguments.contains("-showRF") {
+                    showRFDebug = true
+                }
                 #endif
             }
         }
@@ -104,6 +108,9 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environment(profileStore)
+        }
+        .sheet(isPresented: $showRFDebug) {
+            NavigationStack { RFView() }.environment(store)
         }
         .sheet(isPresented: $showDiagnostics) {
             DiagnosticsView()
@@ -146,6 +153,9 @@ struct ContentView: View {
 
             NavigationStack { WiFiView() }
                 .tabItem { Label("WiFi", systemImage: "wifi") }
+
+            NavigationStack { RFView() }
+                .tabItem { Label("RF", systemImage: "airplane") }
 
             NavigationStack { DevicesView() }
                 .tabItem { Label("Devices", systemImage: "rectangle.connected.to.line.below") }

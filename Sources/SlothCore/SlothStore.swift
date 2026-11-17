@@ -153,6 +153,14 @@ public final class SlothStore {
     /// Latest `sensor_health` per daemon (`wifi` / `rf`).
     public private(set) var sensorHealth: [String: SensorHealthEntry] = [:]
 
+    // RF tables (sloth-rf stream). Keyed on each record's natural key;
+    // a `gone` record removes the row, mirroring sloth's own table.
+    public private(set) var gnssFix: GNSSFixEntry?
+    public private(set) var aircraft: [String: ADSBAircraftEntry]       = [:]
+    public private(set) var aprsStations: [String: APRSStationEntry]    = [:]
+    public private(set) var rtl433Devices: [String: RTL433DeviceEntry]  = [:]
+    public private(set) var victronDevices: [String: VictronDeviceEntry] = [:]
+
     /// Records sloth dropped for this connection, from `socket_gap`.
     public private(set) var socketDroppedTotal: Int = 0
 
@@ -233,6 +241,11 @@ public final class SlothStore {
         case .alertEvent  (let e): ingestAlertEvent(e)
         case .sensorHealth(let e): sensorHealth[e.daemonName] = e
         case .socketGap   (let e): socketDroppedTotal = max(socketDroppedTotal, e.droppedTotal)
+        case .gnssFix      (let e): gnssFix = e
+        case .adsbAircraft (let e): aircraft[e.hex] = e.isGone ? nil : e
+        case .aprsStation  (let e): aprsStations[e.call] = e.isGone ? nil : e
+        case .rtl433Device (let e): rtl433Devices[e.id] = e
+        case .victronDevice(let e): victronDevices[e.mac] = e
         case .unknown:             unknownCount += 1
         case .malformed:           malformedCount += 1
         }
@@ -334,6 +347,11 @@ public final class SlothStore {
         resolvedAlertKeys.removeAll()
         sensorHealth.removeAll()
         socketDroppedTotal = 0
+        gnssFix = nil
+        aircraft.removeAll()
+        aprsStations.removeAll()
+        rtl433Devices.removeAll()
+        victronDevices.removeAll()
         recordsReceived = 0
         rfRecordsReceived = 0
         rfConnectionState = .idle

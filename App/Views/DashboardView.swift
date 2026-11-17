@@ -10,6 +10,7 @@
 //   mDNS | DHCP | SSDP
 //   ARP | Deauth
 //   DNS | ICMP
+//   Aircraft | RF sensors (sloth-rf stream)
 //   Packets (tail)
 //
 // Tap a band title to push the full view — the TUI's Enter-to-drill.
@@ -51,6 +52,10 @@ struct DashboardView: View {
                         DNSLogPanel(); ColumnRule()
                         ICMPLogPanel()
                     }
+                    HStack(alignment: .top, spacing: 10) {
+                        AircraftPanel(); ColumnRule()
+                        RFSensorsPanel()
+                    }
                     PacketsBand()
                 }
                 .padding(14)
@@ -75,6 +80,7 @@ struct DashboardView: View {
         case .dns:         DNSLogView()
         case .icmp:        ICMPLogView()
         case .packets:     PacketsView()
+        case .rf:          RFView()
         }
     }
 }

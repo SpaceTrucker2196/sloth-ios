@@ -18,6 +18,8 @@ struct DiagnosticsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                SensorHealthStrip()
+                Divider()
                 levelStrip
                 if filtered.isEmpty {
                     ContentUnavailableView(

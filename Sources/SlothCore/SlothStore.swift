@@ -138,6 +138,24 @@ public final class SlothStore {
     /// operator without breaking ingest.
     public private(set) var unknownCount: Int = 0
 
+    /// Records of a known type whose body failed to decode. Non-zero
+    /// means sloth changed a record this app reads (#16).
+    public private(set) var malformedCount: Int = 0
+
+    /// `alert.*` lifecycle events, oldest first, capped like `alerts`.
+    public private(set) var alertEvents: [AlertEventEntry] = []
+
+    /// Dedup keys whose current incident has an `alert.resolve`. A row
+    /// stays in `alerts` (MISSION §2: alerts are never cleared on the
+    /// client); views dim it. A later `alert.create` reopens it.
+    public private(set) var resolvedAlertKeys: Set<String> = []
+
+    /// Latest `sensor_health` per daemon (`wifi` / `rf`).
+    public private(set) var sensorHealth: [String: SensorHealthEntry] = [:]
+
+    /// Records sloth dropped for this connection, from `socket_gap`.
+    public private(set) var socketDroppedTotal: Int = 0
+
     public private(set) var recordsReceived: Int = 0
     public private(set) var connectionState: ConnectionState = .idle
     public private(set) var lastError: String?
@@ -192,7 +210,11 @@ public final class SlothStore {
         case .packet      (let e): append(e, into: \.packets, cap: sizes.packets)
         case .wifiAP      (let e): wifiAPs[e.bssid] = e
         case .wifiSTA     (let e): wifiSTAs[e.mac] = e
+        case .alertEvent  (let e): ingestAlertEvent(e)
+        case .sensorHealth(let e): sensorHealth[e.daemonName] = e
+        case .socketGap   (let e): socketDroppedTotal = max(socketDroppedTotal, e.droppedTotal)
         case .unknown:             unknownCount += 1
+        case .malformed:           malformedCount += 1
         }
         recordsReceived += 1
         if connectionState != .connected { connectionState = .connected }
@@ -263,6 +285,11 @@ public final class SlothStore {
         processRxSamples.removeAll()
         processTxSamples.removeAll()
         unknownCount = 0
+        malformedCount = 0
+        alertEvents.removeAll()
+        resolvedAlertKeys.removeAll()
+        sensorHealth.removeAll()
+        socketDroppedTotal = 0
         recordsReceived = 0
         connectionState = .idle
         lastError = nil
@@ -330,6 +357,19 @@ public final class SlothStore {
         let overflow = series.count - cap
         if overflow > 0 { series.removeFirst(overflow) }
         self[keyPath: keyPath][key] = series
+    }
+
+    private func ingestAlertEvent(_ event: AlertEventEntry) {
+        append(event, into: \.alertEvents, cap: sizes.alerts)
+        switch event.kind {
+        case .resolve?:
+            resolvedAlertKeys.insert(event.key)
+        case .create?, .update?, .escalate?:
+            resolvedAlertKeys.remove(event.key)
+            ingestAlert(event.asAlert)
+        case nil:
+            break
+        }
     }
 
     private func ingestAlert(_ entry: AlertEntry) {

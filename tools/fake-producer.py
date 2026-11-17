@@ -30,16 +30,37 @@ def batch(t, tick):
     r.append({"type":"iface","ts":now,"name":"utun4","rx_bytes":52_000_000,"tx_bytes":9_100_000,
               "rx_packets":80_000,"tx_packets":31_000,"rx_errors":0,"rx_drops":0,
               "tx_errors":0,"tx_drops":0,"rx_rate":6.1e4*w(5,1),"tx_rate":1.2e4*w(6,4),"mtu":1280})
-    # alerts
+    # alerts — the live sloth shape (jsonl_version 2.x): `count`, no
+    # first_seen / last_seen; `ts` is the dedup key's last_seen.
     r.append({"type":"alert","ts":now,"title":"THREAT_DOMAIN","detail":"malware.testing.example resolved by 192.168.1.44",
-              "key":"threat:malware.testing.example","hits":4,"first_seen":now-1800,"last_seen":now,
-              "match_ip":"192.0.2.66","sev":2})
-    r.append({"type":"alert","ts":now,"title":"HTTP_ATTACK_PATH","detail":"GET /.env from 192.168.1.31",
-              "key":"http:attack:/.env","hits":2,"first_seen":now-420,"last_seen":now-60,
-              "match_ip":"192.168.1.31","sev":2})
-    r.append({"type":"alert","ts":now,"title":"TLS_DEPRECATED","detail":"TLS 1.0 from iot-plug.local",
-              "key":"tls:old:192.168.1.77","hits":9,"first_seen":now-3600,"last_seen":now-300,
-              "match_ip":"192.168.1.77","sev":1})
+              "key":"threat:malware.testing.example","count":4,"match_ip":"192.0.2.66","sev":2,"ty":3,
+              "incident_id":"a1b2c3d4e5f60718"})
+    r.append({"type":"alert","ts":now-60,"title":"HTTP_ATTACK_PATH","detail":"GET /.env from 192.168.1.31",
+              "key":"http:attack:/.env","count":2,"match_ip":"192.168.1.31","sev":2,"ty":12})
+    r.append({"type":"alert","ts":now-300,"title":"TLS_DEPRECATED","detail":"TLS 1.0 from iot-plug.local",
+              "key":"tls:old:192.168.1.77","count":9,"match_ip":"192.168.1.77","sev":1,"ty":20})
+    # one incident walks create (WARN) -> escalate (CRIT) -> resolve
+    inc = {"incident_id":"9f2c41ab77e30d58","key":"mgmtfuzz:ba:ad:f0:0d:00:01","title":"MGMT_FUZZ",
+           "ty":31,"technique":"T1499","first_detected":now-tick}
+    if tick == 1:
+        r.append({**inc,"type":"alert.create","ts":now,"event_id":"9f2c41ab77e30d58-0001","sev":1,
+                  "detail":"BSSID ba:ad:f0:0d:00:01 malformed IEs: 3 overrun","evaluations":1,"last_evaluated":now})
+    if tick == 4:
+        r.append({**inc,"type":"alert.escalate","ts":now,"event_id":"9f2c41ab77e30d58-0002","sev":2,"prev_sev":1,
+                  "detail":"BSSID ba:ad:f0:0d:00:01 malformed IEs: 5 overrun","evaluations":36,"last_evaluated":now})
+    if tick == 8:
+        r.append({**inc,"type":"alert.resolve","ts":now,"event_id":"9f2c41ab77e30d58-0003","sev":2,
+                  "reason":"expired","evaluations":36,"last_evaluated":now-300})
+    # self-report: the Wi-Fi daemon only, monitor radio gone
+    if tick % 5 == 0:
+        r.append({"type":"sensor_health","ts":now,"capture_iface":"any","monitor_iface":"alfa0","monitor_err":"",
+                  "chan_confirmed_ok":1,"capture_open":1,"capture_running":1,"capture_exit":"none",
+                  "capture_drop":12,"capture_ifdrop":0,"monitor_open":1,"monitor_running":0,
+                  "monitor_exit":"iface_gone","monitor_drop":0,"monitor_ifdrop":3,"evictions":5,
+                  "storage_failures":0,"scope":"none","scope_not_enforced":0,
+                  "daemon":"wifi","db_max_mb":512,"jsonl_version":"2.3.0"})
+    if tick == 6:
+        r.append({"type":"socket_gap","ts":now,"seq":600,"dropped":77,"dropped_total":77})
     # connections
     for i,(ip,host,rate) in enumerate(HOSTS):
         r.append({"type":"connections","ts":now,"src":f"192.168.1.5:5{200+i}","dst":f"{ip}:443",

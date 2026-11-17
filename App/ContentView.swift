@@ -71,6 +71,13 @@ struct ContentView: View {
                     log.info("app", "auto-connecting to active profile on launch")
                     coordinator?.connect()
                 }
+                #if DEBUG
+                // Render checks: `simctl launch … -showDiagnostics`
+                // opens the sheet without a tap (tools/README.md).
+                if ProcessInfo.processInfo.arguments.contains("-showDiagnostics") {
+                    showDiagnostics = true
+                }
+                #endif
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -101,6 +108,7 @@ struct ContentView: View {
         .sheet(isPresented: $showDiagnostics) {
             DiagnosticsView()
                 .environment(log)
+                .environment(store)
         }
         .sheet(isPresented: $showDiscovery) {
             DiscoveryView()

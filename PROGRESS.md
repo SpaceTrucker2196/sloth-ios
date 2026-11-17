@@ -59,6 +59,13 @@ the commit hashes.
 
 ## Landed
 
+### 2026-11-17 — Alert lifecycle, sensor health, live alert decode
+**Commits**: this change
+**Touched**: `Sources/SlothCore/{HealthRecords,SlothRecord,SlothStore}.swift`; `App/Views/{SensorHealthStrip,AlertRowView,AlertsView,DiagnosticsView}.swift`, `App/ContentView.swift`; `tools/fake-producer.py`; `Tests/SlothCoreTests/HealthRecordTests.swift`
+**Why**: #16 — sloth's `alert` record carries no `first_seen` / `last_seen`, so every live alert failed to decode and `try?` dropped it. #14 first slice — `alert.create/update/escalate/resolve`, `sensor_health` (per daemon, `jsonl_version`) and `socket_gap` decode and reach the store; escalations now change the shown severity; resolved rows dim with a RESOLVED label; Diagnostics shows the sensor's self-report. A known type that fails to decode is now `.malformed` and counted, not dropped.
+**Verified**: `make test` exit 0 (242 core tests + app tests), zero warnings. iPhone 17 Pro sim against the updated fake producer: alert chip shows 3 CRIT / 1 WARN; Diagnostics shows `WIFI jsonl 2.3.0`, the stopped monitor radio and the missing RF stream. Alerts-tab RESOLVED row covered by tests only, not screenshotted.
+**Follow-ups**: #14 remaining types (Wi-Fi extras, flows, RF stream records); #15 second endpoint for `sloth-rf`.
+
 ### 2026-11-13 — iOS sensor post + fleet radar (producer role)
 **Commits**: this change (feat: iOS sensor post + fleet radar)
 **Touched**: `Sources/SlothCore/{SensorRecord,SensorBuffer,PostIdentity,PostService,PostClient,FleetStore,FleetRadar}.swift`, `SlothDiscovery.swift`; `App/Sensors/*`; `App/Views/{RadarView,PostView}.swift`; `App/{ContentView,SlothIOSApp}.swift`; `project.yml`, `App/Info.plist`; `MISSION.md`, `AGENTS.md`; `docs/wiki/post-protocol.md`, `docs/views/{radar,post}.md`; `Tests/SlothCoreTests/*`

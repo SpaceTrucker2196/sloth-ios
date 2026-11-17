@@ -9,6 +9,7 @@
 //
 // All filtering / search is client-side over `SlothStore.alerts`.
 
+import Combine
 import SwiftUI
 import SlothCore
 
@@ -137,7 +138,8 @@ struct AlertsView: View {
                     NavigationLink {
                         AlertDetailView(alert: alert)
                     } label: {
-                        AlertRowView(alert: alert, isHot: isHot(alert))
+                        AlertRowView(alert: alert, isHot: isHot(alert),
+                                     isResolved: store.resolvedAlertKeys.contains(alert.key ?? alert.title))
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)

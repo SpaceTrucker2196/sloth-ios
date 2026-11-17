@@ -48,7 +48,13 @@ public enum SlothRecord: Sendable, Equatable {
     case packet(PacketEntry)
     case wifiAP(WiFiAPEntry)
     case wifiSTA(WiFiSTAEntry)
+    case alertEvent(AlertEventEntry)
+    case sensorHealth(SensorHealthEntry)
+    case socketGap(SocketGapEntry)
     case unknown(type: String, ts: Int)
+    /// A known `type` whose body did not decode. Counted, never
+    /// dropped silently: a field sloth stopped sending must show up.
+    case malformed(type: String, ts: Int)
 
     public var ts: Int {
         switch self {
@@ -83,7 +89,11 @@ public enum SlothRecord: Sendable, Equatable {
         case .packet     (let e): return e.ts
         case .wifiAP     (let e): return e.ts
         case .wifiSTA    (let e): return e.ts
-        case .unknown(_, let ts): return ts
+        case .alertEvent  (let e): return e.ts
+        case .sensorHealth(let e): return e.ts
+        case .socketGap   (let e): return e.ts
+        case .unknown(_, let ts):   return ts
+        case .malformed(_, let ts): return ts
         }
     }
 
@@ -120,7 +130,11 @@ public enum SlothRecord: Sendable, Equatable {
         case .packet:      return "packet"
         case .wifiAP:      return "wifi_ap"
         case .wifiSTA:     return "wifi_sta"
-        case .unknown(let t, _): return t
+        case .alertEvent(let e): return e.type
+        case .sensorHealth: return "sensor_health"
+        case .socketGap:    return "socket_gap"
+        case .unknown(let t, _):   return t
+        case .malformed(let t, _): return t
         }
     }
 }
@@ -137,42 +151,58 @@ extension SlothRecord: Decodable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: EnvelopeKey.self)
         let tag = try c.decode(String.self, forKey: .type)
+        do {
+            self = try Self.decodeBody(tag: tag, from: decoder)
+        } catch {
+            let ts = (try? c.decode(Int.self, forKey: .ts)) ?? 0
+            self = .malformed(type: tag, ts: ts)
+        }
+    }
+
+    private static func decodeBody(tag: String, from decoder: any Decoder) throws -> SlothRecord {
+        let c = try decoder.container(keyedBy: EnvelopeKey.self)
+        let r: SlothRecord
         switch tag {
-        case "dns":   self = .dns  (try DNSEntry  (from: decoder))
-        case "tls":   self = .tls  (try TLSEntry  (from: decoder))
-        case "quic":  self = .quic (try QUICEntry (from: decoder))
-        case "http":  self = .http (try HTTPEntry (from: decoder))
-        case "ntp":   self = .ntp  (try NTPEntry  (from: decoder))
-        case "icmp":  self = .icmp (try ICMPEntry (from: decoder))
-        case "alert":       self = .alert      (try AlertEntry      (from: decoder))
-        case "connections": self = .connections(try ConnectionEntry (from: decoder))
-        case "iface":       self = .iface      (try IFaceEntry      (from: decoder))
-        case "device":      self = .device     (try DeviceEntry     (from: decoder))
-        case "beacon":      self = .beacon     (try BeaconEntry     (from: decoder))
-        case "twin_episode":self = .twinEpisode(try TwinEpisodeEntry(from: decoder))
-        case "top_host":    self = .topHost    (try TopHostEntry    (from: decoder))
-        case "process":     self = .process    (try ProcessEntry    (from: decoder))
-        case "deauth":      self = .deauth     (try DeauthEntry     (from: decoder))
-        case "mdns_service":self = .mdnsService(try MDNSServiceEntry(from: decoder))
-        case "dhcp_lease":  self = .dhcpLease  (try DHCPLeaseEntry  (from: decoder))
-        case "arp":         self = .arp        (try ARPEntry        (from: decoder))
-        case "ssdp_device": self = .ssdpDevice (try SSDPDeviceEntry (from: decoder))
-        case "nbns_name":   self = .nbnsName   (try NBNSNameEntry   (from: decoder))
-        case "probe_client":self = .probeClient(try ProbeClientEntry(from: decoder))
-        case "pnl_client":  self = .pnlClient  (try PNLClientEntry  (from: decoder))
-        case "seqnum_client":      self = .seqnumClient     (try SeqnumClientEntry     (from: decoder))
-        case "seqnum_correlation": self = .seqnumCorrelation(try SeqnumCorrelationEntry(from: decoder))
-        case "channel_summary":    self = .channelSummary   (try ChannelSummaryEntry   (from: decoder))
-        case "assoc":       self = .assoc      (try AssocEntry      (from: decoder))
-        case "eapol":       self = .eapol      (try EAPOLEntry      (from: decoder))
-        case "scan_entry":  self = .scanEntry  (try ScanEntry       (from: decoder))
-        case "packet":      self = .packet     (try PacketEntry     (from: decoder))
-        case "wifi_ap":     self = .wifiAP     (try WiFiAPEntry     (from: decoder))
-        case "wifi_sta":    self = .wifiSTA    (try WiFiSTAEntry    (from: decoder))
+        case "dns":   r = .dns  (try DNSEntry  (from: decoder))
+        case "tls":   r = .tls  (try TLSEntry  (from: decoder))
+        case "quic":  r = .quic (try QUICEntry (from: decoder))
+        case "http":  r = .http (try HTTPEntry (from: decoder))
+        case "ntp":   r = .ntp  (try NTPEntry  (from: decoder))
+        case "icmp":  r = .icmp (try ICMPEntry (from: decoder))
+        case "alert":       r = .alert      (try AlertEntry      (from: decoder))
+        case "connections": r = .connections(try ConnectionEntry (from: decoder))
+        case "iface":       r = .iface      (try IFaceEntry      (from: decoder))
+        case "device":      r = .device     (try DeviceEntry     (from: decoder))
+        case "beacon":      r = .beacon     (try BeaconEntry     (from: decoder))
+        case "twin_episode":r = .twinEpisode(try TwinEpisodeEntry(from: decoder))
+        case "top_host":    r = .topHost    (try TopHostEntry    (from: decoder))
+        case "process":     r = .process    (try ProcessEntry    (from: decoder))
+        case "deauth":      r = .deauth     (try DeauthEntry     (from: decoder))
+        case "mdns_service":r = .mdnsService(try MDNSServiceEntry(from: decoder))
+        case "dhcp_lease":  r = .dhcpLease  (try DHCPLeaseEntry  (from: decoder))
+        case "arp":         r = .arp        (try ARPEntry        (from: decoder))
+        case "ssdp_device": r = .ssdpDevice (try SSDPDeviceEntry (from: decoder))
+        case "nbns_name":   r = .nbnsName   (try NBNSNameEntry   (from: decoder))
+        case "probe_client":r = .probeClient(try ProbeClientEntry(from: decoder))
+        case "pnl_client":  r = .pnlClient  (try PNLClientEntry  (from: decoder))
+        case "seqnum_client":      r = .seqnumClient     (try SeqnumClientEntry     (from: decoder))
+        case "seqnum_correlation": r = .seqnumCorrelation(try SeqnumCorrelationEntry(from: decoder))
+        case "channel_summary":    r = .channelSummary   (try ChannelSummaryEntry   (from: decoder))
+        case "assoc":       r = .assoc      (try AssocEntry      (from: decoder))
+        case "eapol":       r = .eapol      (try EAPOLEntry      (from: decoder))
+        case "scan_entry":  r = .scanEntry  (try ScanEntry       (from: decoder))
+        case "packet":      r = .packet     (try PacketEntry     (from: decoder))
+        case "wifi_ap":     r = .wifiAP     (try WiFiAPEntry     (from: decoder))
+        case "wifi_sta":    r = .wifiSTA    (try WiFiSTAEntry    (from: decoder))
+        case "alert.create", "alert.update", "alert.escalate", "alert.resolve":
+                            r = .alertEvent  (try AlertEventEntry  (from: decoder))
+        case "sensor_health": r = .sensorHealth(try SensorHealthEntry(from: decoder))
+        case "socket_gap":    r = .socketGap   (try SocketGapEntry   (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
-            self = .unknown(type: tag, ts: ts)
+            r = .unknown(type: tag, ts: ts)
         }
+        return r
     }
 }
 
@@ -210,7 +240,10 @@ extension SlothRecord: Encodable {
         case .packet     (let e): try e.encode(to: encoder)
         case .wifiAP     (let e): try e.encode(to: encoder)
         case .wifiSTA    (let e): try e.encode(to: encoder)
-        case .unknown(let t, let ts):
+        case .alertEvent  (let e): try e.encode(to: encoder)
+        case .sensorHealth(let e): try e.encode(to: encoder)
+        case .socketGap   (let e): try e.encode(to: encoder)
+        case .unknown(let t, let ts), .malformed(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)
             try c.encode(ts, forKey: .ts)
@@ -474,7 +507,7 @@ public struct AlertEntry: Sendable, Codable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case type, ts, title, detail, key, hits, sev
+        case type, ts, title, detail, key, hits, sev, count
         case firstSeen = "first_seen"
         case lastSeen  = "last_seen"
         case matchIP   = "match_ip"
@@ -496,9 +529,13 @@ public struct AlertEntry: Sendable, Codable, Equatable {
         self.title     = try c.decode(String.self, forKey: .title)
         self.detail    = try c.decodeIfPresent(String.self, forKey: .detail)
         self.key       = try c.decodeIfPresent(String.self, forKey: .key)
-        self.hits      = try c.decodeIfPresent(Int.self,    forKey: .hits) ?? 1
-        self.firstSeen = try c.decode(Int.self,    forKey: .firstSeen)
-        self.lastSeen  = try c.decode(Int.self,    forKey: .lastSeen)
+        // sloth's `alert` carries `count`, not `hits`, and no
+        // first/last seen: `ts` is the dedup key's last_seen. The
+        // older field names are still read for fixtures and forks.
+        self.hits      = try c.decodeIfPresent(Int.self, forKey: .hits)
+                      ?? c.decodeIfPresent(Int.self, forKey: .count) ?? 1
+        self.firstSeen = try c.decodeIfPresent(Int.self, forKey: .firstSeen) ?? ts
+        self.lastSeen  = try c.decodeIfPresent(Int.self, forKey: .lastSeen)  ?? ts
         self.matchIP   = try c.decodeIfPresent(String.self, forKey: .matchIP)
         self.sev       = try c.decode(Int.self,    forKey: .sev)
     }

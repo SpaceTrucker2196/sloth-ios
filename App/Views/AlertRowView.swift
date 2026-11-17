@@ -9,6 +9,9 @@ struct AlertRowView: View {
 
     let alert: AlertEntry
     let isHot: Bool   // alertHot index says match_ip is currently flagged
+    /// sloth sent `alert.resolve` for this key. The row stays; it dims
+    /// and says so in words, so the cue never rests on opacity alone.
+    var isResolved: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -36,6 +39,13 @@ struct AlertRowView: View {
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
+
+                    if isResolved {
+                        Label("RESOLVED", systemImage: "checkmark.circle")
+                            .labelStyle(.titleAndIcon)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
 
                     if alert.hits >= 2 {
                         Text("×\(alert.hits)")
@@ -72,6 +82,7 @@ struct AlertRowView: View {
             .padding(.leading, 10)
             .padding(.trailing, 12)
         }
+        .opacity(isResolved ? 0.55 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(a11yLabel)
     }
@@ -88,6 +99,7 @@ struct AlertRowView: View {
         var parts: [String] = []
         parts.append("\(alert.severity.displayName) alert")
         parts.append(alert.title)
+        if isResolved { parts.append("Resolved") }
         if let d = alert.detail, !d.isEmpty { parts.append(d) }
         parts.append("\(alert.hits) occurrence\(alert.hits == 1 ? "" : "s")")
         parts.append("Last seen \(relativeTime)")

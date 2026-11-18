@@ -18,3 +18,4 @@
 | e95f691 | 2026-11-17T20:43:35Z | claude-opus-5-5 | 210 | 78051 | 13305270 | 278194 | 6.4485 | Alert lifecycle + sensor_health/socket_gap decode, fix dropped live alerts (#16, |
 | 167b1a9 | 2026-11-17T20:54:08Z | claude-fable-5-1,claude-opus-5-5 | 228 | 56888 | 12515436 | 1155878 | 25.7878 | sloth-rf second stream, refused-connect hint, backoff fix (#15); --since previou |
 | 151c721 | 2026-11-17T21:03:09Z | claude-opus-5-5 | 106 | 92391 | 12000790 | 137584 | 5.3491 | RF view: GNSS/ADS-B/APRS/rtl_433/Victron decode + tables (#14 RF slice); --since |
+| 9b14c5c | 2026-11-18T17:24:22Z | claude-opus-5-5 | 120 | 56770 | 7496449 | 260017 | 4.7153 | Host view: sys_status/source_status/sys_sensor/receiver_hw decode, per-stream ho |

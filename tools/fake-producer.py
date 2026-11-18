@@ -143,6 +143,23 @@ def rf_batch(t, tick):
     r = [{"type":"gnss_fix","ts":now,"mode":3,"nsat":14,"usat":9,"hdop":0.9,
           "lat":44.97770,"lon":-93.26500,"alt_m":256.1,"jam":12}]
     if tick % 10 == 0:
+        sats = [("GPS",0,5,5,61,140,44.0,1),("GPS",0,12,12,38,250,39.5,1),("Galileo",2,11,311,47,80,41.0,1),
+                ("GLONASS",6,3,67,22,310,31.0,1),("GPS",0,25,25,9,20,24.0,0),("BeiDou",3,19,419,5,200,None,0)]
+        r.append({"type":"gnss_sky","ts":now,"nsat":len(sats),"usat":4,"rows":len(sats),"overflow":0,
+                  "hdop":0.9,"vdop":1.2,"pdop":1.5,"cn0_mean":35.9,"cn0_max":44.0,"cn0_n":5})
+        for g, gid, sv, prn, el, az, cn0, used in sats:
+            row = {"type":"gnss_sat","ts":now,"gnss":g,"gnssid":gid,"svid":sv,"prn":prn,"el":el,"az":az,
+                   "used":used,"health":1}
+            if cn0 is not None:
+                row["cn0"] = cn0
+            r.append(row)
+    if tick % 4 == 1:
+        n = tick // 4 + 1
+        r.append({"type":"aprs_packet","ts":now,"src":"file:/run/direwolf.log","seq":n,"chan":0,"utime":now,
+                  "source":"KD0ABC-9" if n % 2 else "W0XYZ","heard":"KD0ABC-9" if n % 2 else "W0DIGI",
+                  "direct":1 if n % 2 else 0,"level":"48(12/9)","dti":"!","symbol":"/>",
+                  "lat":44.9771,"lon":-93.2650,"speed_kt":31,"comment":f"mobile, packet {n}"})
+    if tick % 10 == 0:
         r += [
           {"type":"adsb_aircraft","ts":now,"hex":"a8f00e","state":"live","flight":"SWA1234","squawk":"3412",
            "emergency":"none","on_ground":0,"alt_baro":36000,"gs":451,"last_seen":now},

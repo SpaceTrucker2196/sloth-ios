@@ -17,6 +17,17 @@ public enum RFRoster {
         }
     }
 
+    /// Satellites in the solution first, then strongest C/N0 (an
+    /// untracked one last), then by label for a stable order.
+    public static func satellites(_ rows: some Collection<GNSSSatEntry>) -> [GNSSSatEntry] {
+        rows.sorted { a, b in
+            if a.isUsed != b.isUsed { return a.isUsed }
+            let ca = a.cn0 ?? -1, cb = b.cn0 ?? -1
+            if ca != cb { return ca > cb }
+            return a.id < b.id
+        }
+    }
+
     /// Newest heard first; the key breaks ties.
     public static func newest<T: Identifiable>(
         _ rows: some Collection<T>, stamp: (T) -> Int

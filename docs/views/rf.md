@@ -13,8 +13,9 @@ only when the active profile has an **RF stream** endpoint (#15).
 | `aprs_station` | `call` | `SlothStore.aprsStations` (`gone` removes) |
 | `rtl433_device` | `model` + `id` | `SlothStore.rtl433Devices` (no `gone`; sloth evicts) |
 | `victron_device` | `mac` | `SlothStore.victronDevices` (no `gone`) |
-
-Not yet read: `gnss_sky`, `gnss_sat`, `aprs_packet` (stay `.unknown`).
+| `gnss_sky` | singleton | `SlothStore.gnssSky` |
+| `gnss_sat` | `gnssid` + `prn` | `SlothStore.gnssSats`. A set satellite writes nothing: a row quiet for 660 s (`satQuietDrop`, slothweb's rule) is dropped |
+| `aprs_packet` | event | `SlothStore.aprsPackets`, the newest 200 in memory only |
 
 ## Layout
 
@@ -24,9 +25,12 @@ either title drills into the full view.
 ```
 GNSS            3D  9 sats used  HDOP 0.9
                 44.97770, -93.26500
+                Sky             4/6 used · 36 dB-Hz  ›   (→ SkyView)
 Aircraft · 12   ⛔ N123AB  a1b2c3 · sq 7700 · general     4500 ft
                 SWA1234    a8f00e · sq 3412              36000 ft
 APRS · 3        KD0ABC-9   mobile          direct   14 pkts
+APRS packets    KD0ABC-9                  12:26 PM
+ · newest 10    via W0DIGI · 44.977, -93.265 · 31 kt
 Sub-GHz · 5     Acurite-Tower  id 1234 · ch A      21.4°C 48%
 Victron · 1     SmartShunt  c0:ff:ee:…             13.21 V 87%
 ```
@@ -34,11 +38,17 @@ Victron · 1     SmartShunt  c0:ff:ee:…             13.21 V 87%
 Sections with no rows are hidden. With every table empty the view
 says whether the RF stream is live or not configured.
 
+**SkyView** (`App/Views/SkyView.swift`): the pass (used of seen,
+C/N0 mean and max, H/V/P DOP) and one row per satellite: filled dot
+when in the solution (shape and hue), `el` / `az`, C/N0 or "not
+tracked", a warning icon when `health` is 2. Debug: `-showSky`.
+
 ## Ordering
 
 `RFRoster` (SlothCore, tested): aircraft with an emergency first,
 then altitude high → low, ground / unknown last. Other tables newest
-`last_seen` first.
+`last_seen` first. Satellites: used first, then strongest C/N0,
+untracked last. APRS packets: newest first.
 
 ## Severity / colour
 

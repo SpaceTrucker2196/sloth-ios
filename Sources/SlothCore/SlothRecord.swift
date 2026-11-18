@@ -60,6 +60,9 @@ public enum SlothRecord: Sendable, Equatable {
     case sysSensor(SysSensorEntry)
     case sourceStatus(SourceStatusEntry)
     case receiverHW(ReceiverHWEntry)
+    case gnssSky(GNSSSkyEntry)
+    case gnssSat(GNSSSatEntry)
+    case aprsPacket(APRSPacketEntry)
     case unknown(type: String, ts: Int)
     /// A known `type` whose body did not decode. Counted, never
     /// dropped silently: a field sloth stopped sending must show up.
@@ -110,6 +113,9 @@ public enum SlothRecord: Sendable, Equatable {
         case .sysSensor    (let e): return e.ts
         case .sourceStatus (let e): return e.ts
         case .receiverHW   (let e): return e.ts
+        case .gnssSky      (let e): return e.ts
+        case .gnssSat      (let e): return e.ts
+        case .aprsPacket   (let e): return e.ts
         case .unknown(_, let ts):   return ts
         case .malformed(_, let ts): return ts
         }
@@ -160,6 +166,9 @@ public enum SlothRecord: Sendable, Equatable {
         case .sysSensor:     return "sys_sensor"
         case .sourceStatus:  return "source_status"
         case .receiverHW:    return "receiver_hw"
+        case .gnssSky:       return "gnss_sky"
+        case .gnssSat:       return "gnss_sat"
+        case .aprsPacket:    return "aprs_packet"
         case .unknown(let t, _):   return t
         case .malformed(let t, _): return t
         }
@@ -234,6 +243,9 @@ extension SlothRecord: Decodable {
         case "sys_sensor":     r = .sysSensor    (try SysSensorEntry    (from: decoder))
         case "source_status":  r = .sourceStatus (try SourceStatusEntry (from: decoder))
         case "receiver_hw":    r = .receiverHW   (try ReceiverHWEntry   (from: decoder))
+        case "gnss_sky":       r = .gnssSky      (try GNSSSkyEntry      (from: decoder))
+        case "gnss_sat":       r = .gnssSat      (try GNSSSatEntry      (from: decoder))
+        case "aprs_packet":    r = .aprsPacket   (try APRSPacketEntry   (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             r = .unknown(type: tag, ts: ts)
@@ -288,6 +300,9 @@ extension SlothRecord: Encodable {
         case .sysSensor    (let e): try e.encode(to: encoder)
         case .sourceStatus (let e): try e.encode(to: encoder)
         case .receiverHW   (let e): try e.encode(to: encoder)
+        case .gnssSky      (let e): try e.encode(to: encoder)
+        case .gnssSat      (let e): try e.encode(to: encoder)
+        case .aprsPacket   (let e): try e.encode(to: encoder)
         case .unknown(let t, let ts), .malformed(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)

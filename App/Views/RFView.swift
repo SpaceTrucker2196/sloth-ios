@@ -18,7 +18,14 @@ struct RFView: View {
             if isEmpty {
                 RFEmptyState(rfState: store.rfConnectionState)
             }
-            if let fix = store.gnssFix { Section("GNSS") { GNSSRow(fix: fix) } }
+            if store.gnssFix != nil || store.gnssSky != nil {
+                Section("GNSS") {
+                    if let fix = store.gnssFix { GNSSRow(fix: fix) }
+                    if store.gnssSky != nil || !store.gnssSats.isEmpty {
+                        NavigationLink { SkyView() } label: { SkySummaryRow() }
+                    }
+                }
+            }
             if !store.aircraft.isEmpty {
                 Section("Aircraft · \(store.aircraft.count)") {
                     ForEach(RFRoster.aircraft(store.aircraft.values)) { AircraftRow(a: $0) }
@@ -29,6 +36,11 @@ struct RFView: View {
                     ForEach(RFRoster.newest(store.aprsStations.values) { $0.lastSeen ?? $0.ts }) {
                         APRSRow(s: $0)
                     }
+                }
+            }
+            if !store.aprsPackets.isEmpty {
+                Section("APRS packets · newest \(min(store.aprsPackets.count, 10))") {
+                    ForEach(store.aprsPackets.suffix(10).reversed()) { APRSPacketRow(p: $0) }
                 }
             }
             if !store.rtl433Devices.isEmpty {
@@ -51,7 +63,7 @@ struct RFView: View {
     }
 
     private var isEmpty: Bool {
-        store.gnssFix == nil && store.aircraft.isEmpty && store.aprsStations.isEmpty
+        store.gnssFix == nil && store.gnssSky == nil && store.aircraft.isEmpty && store.aprsStations.isEmpty
             && store.rtl433Devices.isEmpty && store.victronDevices.isEmpty
     }
 }

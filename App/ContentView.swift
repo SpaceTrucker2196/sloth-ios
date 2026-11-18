@@ -32,6 +32,7 @@ struct ContentView: View {
     @State private var showPost        = false
     @State private var showRFDebug     = false
     @State private var showHostDebug   = false
+    @State private var showSkyDebug    = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,6 +86,9 @@ struct ContentView: View {
                 if ProcessInfo.processInfo.arguments.contains("-showHost") {
                     showHostDebug = true
                 }
+                if ProcessInfo.processInfo.arguments.contains("-showSky") {
+                    showSkyDebug = true
+                }
                 #endif
             }
         }
@@ -115,6 +119,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showRFDebug) {
             NavigationStack { RFView() }.environment(store)
+        }
+        .sheet(isPresented: $showSkyDebug) {
+            NavigationStack { SkyView() }.environment(store)
         }
         .sheet(isPresented: $showHostDebug) {
             NavigationStack { HostView() }.environment(store)

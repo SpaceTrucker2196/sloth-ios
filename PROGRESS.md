@@ -59,6 +59,13 @@ the commit hashes.
 
 ## Landed
 
+### 2026-11-18 — GNSS sky and APRS packets
+**Commits**: this change
+**Touched**: `Sources/SlothCore/{RFSkyRecords,RFRoster,RFRecords,SlothRecord,SlothStore}.swift`; `App/Views/{SkyView,RFView}.swift`, `App/ContentView.swift`; `docs/views/rf.md`; `tools/fake-producer.py`; `Tests/SlothCoreTests/RFSkyRecordTests.swift`
+**Why**: #14 RF follow-on. `gnss_sky` (singleton), `gnss_sat` (per satellite; a set one sends nothing, so a row quiet 660 s is dropped) and `aprs_packet` (event; newest 200 in memory). RF view gains a Sky row that opens SkyView, and an APRS packets section (newest 10).
+**Verified**: `make test` exit 0 (270 core tests + app tests), zero warnings. iPhone 17 Pro sim with both fake producers: `-showRF` shows the Sky row "4/6 used · 36 dB-Hz" and the packets heading; `-showSky` shows 4 used satellites first, then GPS 25 and BeiDou 19 "not tracked". Packet rows below the fold, covered by tests.
+**Follow-ups**: #14 still open for `sensor`, Wi-Fi extras and flow records.
+
 ### 2026-11-18 — Host view: sys_status, sys_sensor, source_status, receiver_hw
 **Commits**: this change
 **Touched**: `Sources/SlothCore/{HostRecords,SlothRecord,SlothStore}.swift`; `App/Views/{HostView,SensorHealthStrip}.swift`, `App/ContentView.swift`; `docs/views/{host,README}.md`; `tools/fake-producer.py`; `Tests/SlothCoreTests/HostRecordTests.swift`

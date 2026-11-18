@@ -7,8 +7,8 @@
 //
 // All five are change-only snapshots with a 300 s heartbeat. Every
 // figure is omitted when unknown (never 0), so every field past the
-// key is optional. Not yet decoded (stay `.unknown`): `gnss_sky`,
-// `gnss_sat`, `aprs_packet`.
+// key is optional. `gnss_sky`, `gnss_sat` and `aprs_packet` are in
+// RFSkyRecords.swift.
 
 import Foundation
 

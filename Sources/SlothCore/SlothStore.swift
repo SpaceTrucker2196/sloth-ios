@@ -160,6 +160,15 @@ public final class SlothStore {
     public private(set) var aprsStations: [String: APRSStationEntry]    = [:]
     public private(set) var rtl433Devices: [String: RTL433DeviceEntry]  = [:]
     public private(set) var victronDevices: [String: VictronDeviceEntry] = [:]
+    public private(set) var gnssSky: GNSSSkyEntry?
+    /// Satellites in view, keyed `gnssid/prn`. A set satellite writes
+    /// nothing, so a row quiet for `satQuietDrop` is dropped (slothweb's
+    /// rule: two 300 s heartbeats and a margin).
+    public private(set) var gnssSats: [String: GNSSSatEntry] = [:]
+    public static let satQuietDrop = 660
+    /// Newest APRS packets, oldest first. An in-memory tail only.
+    public private(set) var aprsPackets: [APRSPacketEntry] = []
+    public static let aprsPacketCap = 200
 
     /// Host status and source inventory per daemon (`wifi` / `rf`),
     /// keyed on the stream the batch came in on: the records carry no
@@ -255,6 +264,9 @@ public final class SlothStore {
         case .sysSensor    (let e): hostReports[daemon, default: HostReport()].apply(e)
         case .sourceStatus (let e): hostReports[daemon, default: HostReport()].apply(e)
         case .receiverHW   (let e): hostReports[daemon, default: HostReport()].apply(e)
+        case .gnssSky      (let e): gnssSky = e; dropSetSatellites(now: e.ts)
+        case .gnssSat      (let e): gnssSats[e.id] = e; dropSetSatellites(now: e.ts)
+        case .aprsPacket   (let e): appendAPRSPacket(e)
         case .unknown:             unknownCount += 1
         case .malformed:           malformedCount += 1
         }
@@ -362,6 +374,9 @@ public final class SlothStore {
         aprsStations.removeAll()
         rtl433Devices.removeAll()
         victronDevices.removeAll()
+        gnssSky = nil
+        gnssSats.removeAll()
+        aprsPackets.removeAll()
         recordsReceived = 0
         rfRecordsReceived = 0
         rfConnectionState = .idle
@@ -372,6 +387,19 @@ public final class SlothStore {
     }
 
     // MARK: - Internals
+
+    private func dropSetSatellites(now: Int) {
+        let cutoff = now - Self.satQuietDrop
+        if gnssSats.values.contains(where: { $0.ts < cutoff }) {
+            gnssSats = gnssSats.filter { $0.value.ts >= cutoff }
+        }
+    }
+
+    private func appendAPRSPacket(_ p: APRSPacketEntry) {
+        aprsPackets.append(p)
+        let overflow = aprsPackets.count - Self.aprsPacketCap
+        if overflow > 0 { aprsPackets.removeFirst(overflow) }
+    }
 
     private func append<T>(_ value: T, into keyPath: ReferenceWritableKeyPath<SlothStore, [T]>, cap: Int) {
         self[keyPath: keyPath].append(value)

@@ -59,6 +59,13 @@ the commit hashes.
 
 ## Landed
 
+### 2026-11-18 — Host view: sys_status, sys_sensor, source_status, receiver_hw
+**Commits**: this change
+**Touched**: `Sources/SlothCore/{HostRecords,SlothRecord,SlothStore}.swift`; `App/Views/{HostView,SensorHealthStrip}.swift`, `App/ContentView.swift`; `docs/views/{host,README}.md`; `tools/fake-producer.py`; `Tests/SlothCoreTests/HostRecordTests.swift`
+**Why**: #14 host slice. The 60 s host batch from both daemons is decoded and kept per stream (`hostReports["wifi"|"rf"]`): host load, temperatures, voltages, every source's state, attached receivers. A hot box, an under-voltage Pi or a dead source now shows in Diagnostics instead of looking like a quiet network.
+**Verified**: `make test` exit 0 (265 core tests + app tests), zero warnings. iPhone 17 Pro sim, both fake producers: `-showHost` shows the Wi-Fi group with "temp hot" and "1 source down" in red, the RF group with sources and states; `-showDiagnostics` shows the red "Host: temp hot, 1 source down ›" line.
+**Follow-ups**: #14 still open for `gnss_sky`, `gnss_sat`, `aprs_packet`, `sensor`, Wi-Fi extras and flow records.
+
 ### 2026-11-17 — RF view: GNSS, ADS-B, APRS, rtl_433, Victron
 **Commits**: this change
 **Touched**: `Sources/SlothCore/{RFRecords,RFRoster,SlothRecord,SlothStore}.swift`; `App/Views/{RFView,DashboardView,DashboardGrid,DashboardPrimitives}.swift`, `App/ContentView.swift`; `docs/views/{rf,README}.md`; `tools/fake-producer.py`; `Tests/SlothCoreTests/RFRecordTests.swift`

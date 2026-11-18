@@ -56,6 +56,10 @@ public enum SlothRecord: Sendable, Equatable {
     case aprsStation(APRSStationEntry)
     case rtl433Device(RTL433DeviceEntry)
     case victronDevice(VictronDeviceEntry)
+    case sysStatus(SysStatusEntry)
+    case sysSensor(SysSensorEntry)
+    case sourceStatus(SourceStatusEntry)
+    case receiverHW(ReceiverHWEntry)
     case unknown(type: String, ts: Int)
     /// A known `type` whose body did not decode. Counted, never
     /// dropped silently: a field sloth stopped sending must show up.
@@ -102,6 +106,10 @@ public enum SlothRecord: Sendable, Equatable {
         case .aprsStation  (let e): return e.ts
         case .rtl433Device (let e): return e.ts
         case .victronDevice(let e): return e.ts
+        case .sysStatus    (let e): return e.ts
+        case .sysSensor    (let e): return e.ts
+        case .sourceStatus (let e): return e.ts
+        case .receiverHW   (let e): return e.ts
         case .unknown(_, let ts):   return ts
         case .malformed(_, let ts): return ts
         }
@@ -148,6 +156,10 @@ public enum SlothRecord: Sendable, Equatable {
         case .aprsStation:   return "aprs_station"
         case .rtl433Device:  return "rtl433_device"
         case .victronDevice: return "victron_device"
+        case .sysStatus:     return "sys_status"
+        case .sysSensor:     return "sys_sensor"
+        case .sourceStatus:  return "source_status"
+        case .receiverHW:    return "receiver_hw"
         case .unknown(let t, _):   return t
         case .malformed(let t, _): return t
         }
@@ -218,6 +230,10 @@ extension SlothRecord: Decodable {
         case "aprs_station":   r = .aprsStation  (try APRSStationEntry  (from: decoder))
         case "rtl433_device":  r = .rtl433Device (try RTL433DeviceEntry (from: decoder))
         case "victron_device": r = .victronDevice(try VictronDeviceEntry(from: decoder))
+        case "sys_status":     r = .sysStatus    (try SysStatusEntry    (from: decoder))
+        case "sys_sensor":     r = .sysSensor    (try SysSensorEntry    (from: decoder))
+        case "source_status":  r = .sourceStatus (try SourceStatusEntry (from: decoder))
+        case "receiver_hw":    r = .receiverHW   (try ReceiverHWEntry   (from: decoder))
         default:
             let ts = try c.decode(Int.self, forKey: .ts)
             r = .unknown(type: tag, ts: ts)
@@ -268,6 +284,10 @@ extension SlothRecord: Encodable {
         case .aprsStation  (let e): try e.encode(to: encoder)
         case .rtl433Device (let e): try e.encode(to: encoder)
         case .victronDevice(let e): try e.encode(to: encoder)
+        case .sysStatus    (let e): try e.encode(to: encoder)
+        case .sysSensor    (let e): try e.encode(to: encoder)
+        case .sourceStatus (let e): try e.encode(to: encoder)
+        case .receiverHW   (let e): try e.encode(to: encoder)
         case .unknown(let t, let ts), .malformed(let t, let ts):
             var c = encoder.container(keyedBy: EnvelopeKey.self)
             try c.encode(t,  forKey: .type)

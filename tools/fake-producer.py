@@ -165,6 +165,58 @@ def rf_batch(t, tick):
                   "storage_jsonl_failures":0,"daemon":"rf","db_max_mb":-1,"jsonl_version":"2.3.0"})
     return r
 
+def host_batch(t, tick):
+    """sys_status + sys_sensor + source_status + receiver_hw, every 10
+    ticks, one shared seq. The Wi-Fi side runs hot with a source down."""
+    if tick % 10:
+        return []
+    now, seq = int(t), tick // 10 + 1
+    hot = not RF
+    r = [{"type":"sys_status","ts":now,"seq":seq,"interval_s":60,"cpu_pct":38.0 if hot else 12.5,
+          "cpu_band":"low","load1":1.42 if hot else 0.31,"mem_total_kb":3884328,"mem_avail_kb":1213246,
+          "mem_band":"ok","uptime_s":350735+tick,"disk_for":"db","disk_free_mb":21840,"disk_total_mb":29500,
+          "disk_band":"ok","temps":2,"temp_max_c":72.4 if hot else 48.0,"temp_max_id":"thermal_zone0",
+          "temp_band":"hot" if hot else "ok","volts":1,"undervolt":0,"power":0,"sources":5,
+          "sources_configured":4 if hot else 3,"sources_ok":3,"sources_down":1 if hot else 0,"receivers":2},
+         {"type":"sys_sensor","ts":now,"seq":seq,"class":"temp","id":"thermal_zone0","label":"cpu-thermal",
+          "c":72.4 if hot else 48.0},
+         {"type":"sys_sensor","ts":now,"seq":seq,"class":"volt","id":"hwmon1/in0","label":"rpi_volt","alarm":0}]
+    if RF:
+        srcs = [("gnss","gnss","--gps","ok","fix 3d","gpsd:127.0.0.1:2947","sentences",3.0),
+                ("adsb","adsb","--adsb","ok","live","beast:127.0.0.1:30005","messages",212.4),
+                ("aprs","aprs","--aprs","stale","waiting for direwolf","/run/direwolf.log","packets",None),
+                ("rtl433","sub-ghz","--rtl433","ok","live","/run/rtl433.json","messages",0.4),
+                ("victron","victron","--victron","not_configured","","",None,None)]
+        hw = [{"key":"usb:1-1.2","kind":"sdr","bus":"usb","id":"0bda:2838","known":1,
+               "desc":"Realtek RTL2838 DVB-T (RTL-SDR)","vendor":"Realtek","product":"RTL2838UHIDIR",
+               "driver":"dvb_usb_rtl28xxu","ifaces":""},
+              {"key":"usb:1-1.3","kind":"gnss","bus":"usb","id":"1546:01a8","known":1,
+               "desc":"u-blox 8 GNSS receiver","vendor":"u-blox AG","product":"u-blox GNSS receiver",
+               "driver":"cdc_acm","ifaces":"ttyACM0"}]
+    else:
+        srcs = [("capture","ip-capture","--iface","ok","","any","frames",88.2),
+                ("monitor","wifi-monitor","a monitor-mode interface","down","exit: iface_gone: No such device",
+                 "alfa0","frames",None),
+                ("btmon","bluetooth","--bt-monitor","ok","","hci0","records",4.1),
+                ("btcap","bluetooth-sniffer","--bt-capture","not_configured","","",None,None),
+                ("gnss","gnss","--gps","ok","fix 3d","gpsd:127.0.0.1:2947","sentences",3.0)]
+        hw = [{"key":"net:wlan1","kind":"wifi","bus":"usb","id":"0bda:8812","known":1,
+               "desc":"Realtek RTL8812AU 802.11ac","vendor":"Realtek","product":"802.11n NIC",
+               "driver":"rtl88XXau","ifaces":"wlan1"},
+              {"key":"bt:hci0","kind":"bluetooth","bus":"sdio","id":"","known":0,"desc":"",
+               "vendor":"","product":"","driver":"hci_uart","ifaces":"hci0"}]
+    for name, kind, flag, state, detail, ep, unit, rate in srcs:
+        row = {"type":"source_status","ts":now,"seq":seq,"name":name,"kind":kind,"flag":flag,
+               "state":state,"detail":detail,"endpoint":ep}
+        if state != "not_configured":
+            row.update({"age_s":0 if state == "ok" else 300,"age_band":"fresh" if state == "ok" else "stale",
+                        "unit":unit,"count":1000+tick,"errors":0})
+            if rate is not None:
+                row["rate"] = rate
+        r.append(row)
+    r += [{"type":"receiver_hw","ts":now,"seq":seq,**h} for h in hw]
+    return r
+
 RF = False
 
 async def handle(reader, writer):
@@ -173,7 +225,7 @@ async def handle(reader, writer):
     tick = 0
     try:
         while True:
-            lines = "".join(json.dumps(rec) + "\n" for rec in (rf_batch if RF else batch)(time.time(), tick))
+            lines = "".join(json.dumps(rec) + "\n" for rec in [*(rf_batch if RF else batch)(time.time(), tick), *host_batch(time.time(), tick)])
             writer.write(lines.encode())
             await writer.drain()
             tick += 1

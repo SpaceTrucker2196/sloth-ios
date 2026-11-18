@@ -21,6 +21,7 @@ struct SensorHealthStrip: View {
             }
             rfLine
             counters
+            hostLink
         }
         .font(.caption.monospaced())
         .padding(.horizontal, 12)
@@ -48,6 +49,30 @@ struct SensorHealthStrip: View {
             Text("RF stream down: \(reason ?? "closed by sensor")")
                 .foregroundStyle(Color.alertHotWarn)
         }
+    }
+
+    /// One line per daemon's host report; the problems in it, if any,
+    /// so a hot or under-volted box shows without opening the page.
+    @ViewBuilder private var hostLink: some View {
+        if !store.hostReports.isEmpty {
+            NavigationLink {
+                HostView()
+            } label: {
+                HStack(spacing: 6) {
+                    let problems = store.hostReports.values
+                        .flatMap { $0.status?.problems ?? [] }
+                    Image(systemName: problems.isEmpty ? "cpu" : "exclamationmark.octagon")
+                    Text(problems.isEmpty ? "Host & sources" : "Host: " + problems.joined(separator: ", "))
+                    Image(systemName: "chevron.right").imageScale(.small)
+                }
+                .foregroundStyle(hostTint)
+            }
+        }
+    }
+
+    private var hostTint: Color {
+        store.hostReports.values.contains { !($0.status?.problems.isEmpty ?? true) }
+            ? .alertHotCrit : .accentColor
     }
 
     @ViewBuilder private var counters: some View {

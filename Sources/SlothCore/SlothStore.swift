@@ -161,6 +161,11 @@ public final class SlothStore {
     public private(set) var rtl433Devices: [String: RTL433DeviceEntry]  = [:]
     public private(set) var victronDevices: [String: VictronDeviceEntry] = [:]
 
+    /// Host status and source inventory per daemon (`wifi` / `rf`),
+    /// keyed on the stream the batch came in on: the records carry no
+    /// `daemon` field.
+    public private(set) var hostReports: [String: HostReport] = [:]
+
     /// Records sloth dropped for this connection, from `socket_gap`.
     public private(set) var socketDroppedTotal: Int = 0
 
@@ -193,19 +198,19 @@ public final class SlothStore {
     // MARK: - Ingest
 
     public func ingest(_ record: SlothRecord) {
-        route(record)
+        route(record, daemon: "wifi")
         recordsReceived += 1
         if connectionState != .connected { connectionState = .connected }
     }
 
     /// One record off the `sloth-rf` stream.
     public func ingestRF(_ record: SlothRecord) {
-        route(record)
+        route(record, daemon: "rf")
         rfRecordsReceived += 1
         if rfConnectionState != .connected { rfConnectionState = .connected }
     }
 
-    private func route(_ record: SlothRecord) {
+    private func route(_ record: SlothRecord, daemon: String) {
         switch record {
         case .dns  (let e): append(e, into: \.dns,  cap: sizes.dns)
         case .tls  (let e): append(e, into: \.tls,  cap: sizes.tls)
@@ -246,6 +251,10 @@ public final class SlothStore {
         case .aprsStation  (let e): aprsStations[e.call] = e.isGone ? nil : e
         case .rtl433Device (let e): rtl433Devices[e.id] = e
         case .victronDevice(let e): victronDevices[e.mac] = e
+        case .sysStatus    (let e): hostReports[daemon, default: HostReport()].apply(e)
+        case .sysSensor    (let e): hostReports[daemon, default: HostReport()].apply(e)
+        case .sourceStatus (let e): hostReports[daemon, default: HostReport()].apply(e)
+        case .receiverHW   (let e): hostReports[daemon, default: HostReport()].apply(e)
         case .unknown:             unknownCount += 1
         case .malformed:           malformedCount += 1
         }
@@ -347,6 +356,7 @@ public final class SlothStore {
         resolvedAlertKeys.removeAll()
         sensorHealth.removeAll()
         socketDroppedTotal = 0
+        hostReports.removeAll()
         gnssFix = nil
         aircraft.removeAll()
         aprsStations.removeAll()

@@ -190,4 +190,25 @@ final class MoreSnapshotRecordTests: XCTestCase {
     private func decode(_ json: String) throws -> SlothRecord {
         try JSONDecoder().decode(SlothRecord.self, from: Data(json.utf8))
     }
+
+    // Live W9FJC data, 2026-11-19: these four fields are numbers on the
+    // wire. Read as text they failed 21k records in 20 s as malformed.
+    func testNumericWireFieldsFromLiveSensor() throws {
+        func rec(_ j: String) throws -> SlothRecord {
+            try JSONDecoder().decode(SlothRecord.self, from: Data(j.utf8))
+        }
+        guard case .packet(let p) = try rec(#"{"type":"packet","ts":1,"ts_sec":1,"ts_usec":565647,"src":"100.104.235.118","dst":"100.110.58.98","src_port":8765,"dst_port":50733,"proto":6,"len":1300,"info":"TCP ACK"}"#) else { return XCTFail() }
+        XCTAssertEqual(p.protoName, "TCP")
+
+        guard case .assoc(let a) = try rec(#"{"type":"assoc","ts":1,"bssid":"64:67:72:f2:49:e6","sta_mac":"f8:51:28:25:ef:d6","ssid":"X","sta_random":0,"source":1,"channel":1,"signal_dbm":-52,"first_seen":1,"last_seen":2,"frame_count":8}"#) else { return XCTFail() }
+        XCTAssertEqual(a.sourceName, "EAPOL key")
+
+        guard case .wifiAP(let off) = try rec(#"{"type":"wifi_ap","ts":1,"ssid":"HP","bssid":"10:b6:76:b8:4b:51","signal_dbm":-41,"channel":11,"enc":"WPA2","status":-1}"#) else { return XCTFail() }
+        XCTAssertFalse(off.isConnected)
+        guard case .wifiAP(let on) = try rec(#"{"type":"wifi_ap","ts":1,"bssid":"aa","status":1}"#) else { return XCTFail() }
+        XCTAssertTrue(on.isConnected)
+
+        guard case .nbnsName(let n) = try rec(#"{"type":"nbns_name","ts":1,"name":"WORKGROUP","ip":"","suffix":29,"last_seen":1}"#) else { return XCTFail() }
+        XCTAssertEqual(n.suffixLabel, "<1D>")
+    }
 }

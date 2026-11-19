@@ -73,10 +73,9 @@ final class RFStreamTests: XCTestCase {
 
     // MARK: - Connection hint
 
-    func testRefusedNamesTheSensorFlag() {
+    func testRefusedIsShort() {
         let msg = ConnectionHint.describe(NWError.posix(.ECONNREFUSED))
-        XCTAssertTrue(msg.contains("--data-socket tcp:"), msg)
-        XCTAssertTrue(msg.contains("--data-socket-allow-remote"), msg)
+        XCTAssertEqual(msg, "refused — nothing listens on that port")
     }
 
     func testOtherErrorsPassThrough() {

@@ -49,7 +49,7 @@ struct PacketsView: View {
         return reversed.filter {
             LogFilter.matches(
                 query:  query,
-                fields: [$0.src, $0.dst, $0.proto, $0.info].compactMap { $0 }
+                fields: [$0.src, $0.dst, $0.protoName, $0.info].compactMap { $0 }
             )
         }
     }
@@ -65,7 +65,7 @@ private struct PacketRow: View {
                 Text(timeStamp)
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
-                if let p = packet.proto, !p.isEmpty {
+                if let p = packet.protoName, !p.isEmpty {
                     Text(p.uppercased())
                         .font(.caption2.monospaced().weight(.bold))
                         .foregroundStyle(protoTint)
@@ -119,7 +119,7 @@ private struct PacketRow: View {
     }
 
     private var protoTint: Color {
-        switch (packet.proto ?? "").uppercased() {
+        switch (packet.protoName ?? "").uppercased() {
         case "TCP":  return .phosphorTeal
         case "UDP":  return .phosphorBright
         case "ICMP": return .alertHotLow

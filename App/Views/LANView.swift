@@ -349,8 +349,8 @@ private struct NBNSRow: View {
                     Text(name.ip)
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
-                    if let s = name.suffix, !s.isEmpty {
-                        Text("[0x\(s)]")
+                    if let s = name.suffixLabel, !s.isEmpty {
+                        Text(s)
                             .font(.caption2.monospaced())
                             .foregroundStyle(.tertiary)
                     }

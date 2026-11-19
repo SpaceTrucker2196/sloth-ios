@@ -1399,7 +1399,7 @@ public struct NBNSNameEntry: Sendable, Codable, Equatable, Identifiable {
         self.ts       = try c.decode(Int.self,    forKey: .ts)
         self.name     = try c.decode(String.self, forKey: .name)
         self.ip       = try c.decode(String.self, forKey: .ip)
-        self.suffix   = try c.decodeIfPresent(String.self, forKey: .suffix)
+        self.suffix   = try c.flexString(.suffix)   // a number on the wire
         self.lastSeen = try c.decodeIfPresent(Int.self,    forKey: .lastSeen) ?? 0
     }
 
@@ -1706,7 +1706,7 @@ public struct AssocEntry: Sendable, Codable, Equatable, Identifiable {
         self.staMAC     = try c.decode(String.self, forKey: .staMAC)
         self.ssid       = try c.decodeIfPresent(String.self, forKey: .ssid)
         self.staRandom  = try c.decodeIfPresent(Int.self,    forKey: .staRandom)  ?? 0
-        self.source     = try c.decodeIfPresent(String.self, forKey: .source)
+        self.source     = try c.flexString(.source)  // ASSOC_SRC_*, a number
         self.channel    = try c.decodeIfPresent(Int.self,    forKey: .channel)
         self.signalDBM  = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
         self.firstSeen  = try c.decodeIfPresent(Int.self,    forKey: .firstSeen)  ?? 0
@@ -1877,7 +1877,7 @@ public struct PacketEntry: Sendable, Codable, Equatable {
         self.dst     = try c.decode(String.self, forKey: .dst)
         self.srcPort = try c.decodeIfPresent(Int.self,    forKey: .srcPort)
         self.dstPort = try c.decodeIfPresent(Int.self,    forKey: .dstPort)
-        self.proto   = try c.decodeIfPresent(String.self, forKey: .proto)
+        self.proto   = try c.flexString(.proto)   // IP protocol number
         self.len     = try c.decodeIfPresent(Int.self,    forKey: .len)     ?? 0
         self.info    = try c.decodeIfPresent(String.self, forKey: .info)
     }
@@ -1923,6 +1923,10 @@ public struct WiFiAPEntry: Sendable, Codable, Equatable, Identifiable {
     /// doesn't silently break the indicator.
     public var isConnected: Bool {
         guard let s = status?.uppercased() else { return false }
+        // sloth writes NL80211_BSS_STATUS_*: -1 none, 0 authenticated,
+        // 1 associated, 2 IBSS joined (include/sloth.h). Live data from
+        // 2026-11-19 carried only numbers; the words stay for old logs.
+        if let n = Int(s) { return n == 1 || n == 2 }
         return s.contains("CONNECT") || s.contains("ASSOC")
     }
 
@@ -1939,7 +1943,7 @@ public struct WiFiAPEntry: Sendable, Codable, Equatable, Identifiable {
         self.signalDBM = try c.decodeIfPresent(Int.self,    forKey: .signalDBM)
         self.channel   = try c.decodeIfPresent(Int.self,    forKey: .channel)
         self.enc       = try c.decodeIfPresent(String.self, forKey: .enc)
-        self.status    = try c.decodeIfPresent(String.self, forKey: .status)
+        self.status    = try c.flexString(.status)  // NL80211_BSS_STATUS_*
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -2015,5 +2019,46 @@ public struct WiFiSTAEntry: Sendable, Codable, Equatable, Identifiable {
         try c.encode(inactiveMS,    forKey: .inactiveMS)
         try c.encode(txBytes,       forKey: .txBytes)
         try c.encode(rxBytes,       forKey: .rxBytes)
+    }
+}
+
+// MARK: - Numeric wire fields, named (live data 2026-11-19)
+
+extension PacketEntry {
+    /// `proto` is the IP protocol number on the wire (6, 17, …); the
+    /// name for the common ones, else the number.
+    public var protoName: String? {
+        guard let p = proto else { return nil }
+        switch Int(p) {
+        case 1?:  return "ICMP"
+        case 6?:  return "TCP"
+        case 17?: return "UDP"
+        case 58?: return "ICMPv6"
+        case let n?: return "IP \(n)"
+        case nil: return p
+        }
+    }
+}
+
+extension NBNSNameEntry {
+    /// The NetBIOS service byte as Windows writes it, `<1D>`.
+    public var suffixLabel: String? {
+        guard let s = suffix else { return nil }
+        if let n = Int(s) { return String(format: "<%02X>", n) }
+        return s
+    }
+}
+
+extension AssocEntry {
+    /// Which frame proved the link (`ASSOC_SRC_*`, include/sloth.h).
+    public var sourceName: String? {
+        guard let s = source else { return nil }
+        switch Int(s) {
+        case 0?: return "unknown"
+        case 1?: return "EAPOL key"
+        case 2?: return "assoc response"
+        case 3?: return "reassoc response"
+        default: return s
+        }
     }
 }

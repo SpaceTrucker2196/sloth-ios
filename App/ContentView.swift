@@ -60,7 +60,7 @@ struct ContentView: View {
                 // Errors as a toast over the content, never over the
                 // bar's sensor picker (#20). Only the toast takes taps.
                 .overlay(alignment: .top) {
-                    ErrorToast(message: coordinator?.parseError ?? store.lastError)
+                    ErrorToast(message: toastMessage)
                 }
         }
         .task {
@@ -214,6 +214,21 @@ struct ContentView: View {
             NavigationStack { PostView() }
                 .tabItem { Label("Post", systemImage: "antenna.radiowaves.left.and.right.circle") }
         }
+    }
+
+    /// The toast's text (#20): each stream that is down right now, with
+    /// its address, so a refused RF stream is not read as the Wi-Fi
+    /// one. Nil while both are up, which hides the toast at once.
+    private var toastMessage: String? {
+        if let p = coordinator?.parseError { return p }
+        var lines: [String] = []
+        if case .disconnected = store.connectionState, let e = store.lastError {
+            lines.append("Wi-Fi \(profileStore.activeProfile?.profile.uri ?? ""): \(e)")
+        }
+        if case .disconnected = store.rfConnectionState, let e = store.rfLastError {
+            lines.append("RF \(profileStore.activeProfile?.rf?.uri ?? ""): \(e)")
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     /// Tab badge: twin episodes at WARN+ plus any deauth flow sloth

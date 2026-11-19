@@ -20,3 +20,4 @@
 | 151c721 | 2026-11-17T21:03:09Z | claude-opus-5-5 | 106 | 92391 | 12000790 | 137584 | 5.3491 | RF view: GNSS/ADS-B/APRS/rtl_433/Victron decode + tables (#14 RF slice); --since |
 | 9b14c5c | 2026-11-18T17:24:22Z | claude-opus-5-5 | 120 | 56770 | 7496449 | 260017 | 4.7153 | Host view: sys_status/source_status/sys_sensor/receiver_hw decode, per-stream ho |
 | 6d68679 | 2026-11-18T19:28:45Z | claude-fable-5-1,claude-opus-5-5 | 1006 | 71739 | 21295360 | 613329 | 17.0961 | GNSS sky/sat + APRS packet decode, SkyView (#14); --since previous commit, idle  |
+| 1cb5b6c | 2026-11-19T20:29:36Z | claude-opus-5-5 | 584 | 169516 | 76879069 | 1688861 | 30.7740 | Profile switch connects + URI space trim (#18); also W9FJC/beta-site tailnet bri |

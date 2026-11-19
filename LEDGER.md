@@ -23,3 +23,4 @@
 | 1cb5b6c | 2026-11-19T20:29:36Z | claude-opus-5-5 | 584 | 169516 | 76879069 | 1688861 | 30.7740 | Profile switch connects + URI space trim (#18); also W9FJC/beta-site tailnet bri |
 | 2d38d79 | 2026-11-19T20:32:17Z | claude-opus-5-5 | 28 | 11246 | 4858104 | 17209 | 1.3343 | Connection bar picks a saved profile (#19) |
 | cb113f9 | 2026-11-19T20:47:16Z | claude-opus-5-5 | 38 | 12792 | 6788577 | 33617 | 1.8826 | Error toast instead of bar overlay (#20) |
+| 280e2b0 | 2026-11-19T20:59:47Z | claude-opus-5-5 | 120 | 47766 | 22977716 | 71383 | 6.1224 | Live-data decode fix for 4 numeric fields (#21); toast names the stream (#20) |

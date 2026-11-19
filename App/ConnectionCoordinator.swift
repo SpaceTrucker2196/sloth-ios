@@ -22,6 +22,9 @@ final class ConnectionCoordinator {
 
     private var task: Task<Void, Never>?
     private var rfTask: Task<Void, Never>?
+    /// The profile the running loops dial. A switch to another one
+    /// reconnects (#18); a write that keeps this one active does not.
+    private var connectedID: UUID?
     private let client:        SlothClient
     private let store:         SlothStore
     private let profileStore:  ProfileStore
@@ -46,6 +49,18 @@ final class ConnectionCoordinator {
         if let p = profileStore.activeProfile?.profile {
             draftURI = p.uri
         }
+    }
+
+    /// The active profile changed (Settings → Profiles, #18): drop the
+    /// old sensor's stream and its records, then dial the new one.
+    /// Records of two sensors must never mix under one name.
+    func switchToActive() {
+        loadActiveIntoDraft()
+        guard let id = profileStore.activeID, id != connectedID else { return }
+        log.info("net", "profile switched — reconnecting")
+        disconnect()
+        store.reset()
+        connect()
     }
 
     /// User-initiated connect. Parses the draft URI; if it's new,
@@ -73,6 +88,7 @@ final class ConnectionCoordinator {
         // Also keep the legacy single-profile key in sync for any
         // tool still reading it.
         profile.save()
+        connectedID = profileStore.activeID
 
         disconnect()
         let reconnector = Reconnector()

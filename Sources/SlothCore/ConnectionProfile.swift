@@ -45,11 +45,15 @@ public struct ConnectionProfile: Sendable, Codable, Equatable, Hashable {
             portPart = String(rest[rest.index(after: lastColon)...])
         }
 
-        guard !hostPart.isEmpty,
-              let port = UInt16(portPart), port > 0
+        // A space typed after `tcp:` or around the port (#18) would
+        // make the host a name to look up: " 100.64.0.1" fails as DNS
+        // NoSuchRecord (-65554) instead of dialing the address.
+        let host = hostPart.trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty, !host.contains(where: \.isWhitespace),
+              let port = UInt16(portPart.trimmingCharacters(in: .whitespaces)), port > 0
         else { return nil }
 
-        self.host = hostPart
+        self.host = host
         self.port = port
     }
 

@@ -111,7 +111,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: profileStore.activeID) { _, _ in
-            coordinator?.loadActiveIntoDraft()
+            coordinator?.switchToActive()
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()

@@ -72,4 +72,13 @@ final class ConnectionProfileTests: XCTestCase {
         ConnectionProfile.clear(in: suite)
         XCTAssertNil(ConnectionProfile.load(from: suite))
     }
+
+    // #18: a space typed on the phone must not turn an address into a
+    // DNS name.
+    func testSpacesAroundHostAndPortAreDropped() {
+        let p = ConnectionProfile(uri: "tcp: 100.104.235.118 : 8765")
+        XCTAssertEqual(p?.host, "100.104.235.118")
+        XCTAssertEqual(p?.port, 8765)
+        XCTAssertNil(ConnectionProfile(uri: "tcp:100.104 .235.118:8765"))
+    }
 }

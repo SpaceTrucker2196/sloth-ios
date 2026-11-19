@@ -40,6 +40,7 @@ struct ContentView: View {
                 ConnectionBar(
                     coordinator: coordinator,
                     store: store,
+                    profiles: profileStore,
                     onDiscover:    { showDiscovery = true },
                     onSettings:    { showSettings = true },
                     onDiagnostics: { showDiagnostics = true },
@@ -232,6 +233,7 @@ private struct ConnectionBar: View {
 
     @Bindable var coordinator: ConnectionCoordinator
     let store: SlothStore
+    let profiles: ProfileStore
     let onDiscover:    () -> Void
     let onSettings:    () -> Void
     let onDiagnostics: () -> Void
@@ -240,11 +242,7 @@ private struct ConnectionBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            TextField("tcp:HOST:PORT", text: $coordinator.draftURI)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .onSubmit(coordinator.connect)
+            ProfilePicker(store: store, profiles: profiles, onEdit: onSettings)
             Button(action: onDiscover) {
                 Image(systemName: "wifi.router")
             }
@@ -311,6 +309,82 @@ private struct ConnectionBar: View {
         switch store.connectionState {
         case .connected, .connecting: return "Reconnect"
         default: return "Connect"
+        }
+    }
+}
+
+/// The connection bar's sensor choice (#19): the saved profiles, not a
+/// typed address. Picking one makes it active; ContentView's
+/// `activeID` observer then reconnects (#18). Addresses are typed only
+/// in the profile editor.
+private struct ProfilePicker: View {
+
+    let store: SlothStore
+    let profiles: ProfileStore
+    let onEdit: () -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(profiles.profiles) { p in
+                Button {
+                    profiles.setActive(p.id)
+                } label: {
+                    if p.id == profiles.activeID {
+                        Label(p.name, systemImage: "checkmark")
+                    } else {
+                        Text(p.name)
+                    }
+                }
+            }
+            Divider()
+            Button(action: onEdit) {
+                Label(profiles.profiles.isEmpty ? "Add a profile…" : "Edit profiles…",
+                      systemImage: "person.crop.circle")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: stateIcon).foregroundStyle(stateTint)
+                Text(profiles.activeProfile?.name ?? "Choose a sensor")
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color(.secondarySystemBackground)))
+        }
+        .accessibilityLabel("Sensor: \(profiles.activeProfile?.name ?? "none"), \(stateWord)")
+    }
+
+    // Shape as well as hue for the live state.
+    private var stateIcon: String {
+        switch store.connectionState {
+        case .connected:    return "circle.fill"
+        case .connecting:   return "circle.dotted"
+        case .disconnected: return "exclamationmark.circle"
+        case .idle:         return "circle"
+        }
+    }
+
+    private var stateTint: Color {
+        switch store.connectionState {
+        case .connected:    return .phosphorTeal
+        case .connecting:   return .secondary
+        case .disconnected: return .alertHotWarn
+        case .idle:         return .secondary
+        }
+    }
+
+    private var stateWord: String {
+        switch store.connectionState {
+        case .connected:    return "connected"
+        case .connecting:   return "connecting"
+        case .disconnected: return "disconnected"
+        case .idle:         return "idle"
         }
     }
 }

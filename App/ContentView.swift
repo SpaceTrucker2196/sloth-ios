@@ -57,6 +57,11 @@ struct ContentView: View {
                 ProgressView().padding()
             }
             content
+                // Errors as a toast over the content, never over the
+                // bar's sensor picker (#20). Only the toast takes taps.
+                .overlay(alignment: .top) {
+                    ErrorToast(message: coordinator?.parseError ?? store.lastError)
+                }
         }
         .task {
             if coordinator == nil {
@@ -293,15 +298,6 @@ private struct ConnectionBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .overlay(alignment: .bottomLeading) {
-            if let err = coordinator.parseError ?? store.lastError {
-                Text(err)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 2)
-            }
-        }
         .background(.bar)
     }
 

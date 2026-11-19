@@ -81,7 +81,9 @@ struct SystemPulseChip: View {
         case .idle:                return "idle"
         case .connecting:          return "connecting"
         case .connected:           return "live"
-        case .disconnected(let r): return r.map { "disc: \($0)" } ?? "disconnected"
+        // One word: the reason is the toast's (#20), and here it wrapped
+        // to seven lines and pushed the content down.
+        case .disconnected: return "down"
         }
     }
 

@@ -24,3 +24,4 @@
 | 2d38d79 | 2026-11-19T20:32:17Z | claude-opus-5-5 | 28 | 11246 | 4858104 | 17209 | 1.3343 | Connection bar picks a saved profile (#19) |
 | cb113f9 | 2026-11-19T20:47:16Z | claude-opus-5-5 | 38 | 12792 | 6788577 | 33617 | 1.8826 | Error toast instead of bar overlay (#20) |
 | 280e2b0 | 2026-11-19T20:59:47Z | claude-opus-5-5 | 120 | 47766 | 22977716 | 71383 | 6.1224 | Live-data decode fix for 4 numeric fields (#21); toast names the stream (#20) |
+| 247e369 | 2026-11-20T15:51:30Z | claude-opus-5-5 | 130 | 37697 | 7751484 | 289018 | 4.6169 | Show sloth's sensor registry and the not_installed source state (#14) |

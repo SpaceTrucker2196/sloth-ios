@@ -60,6 +60,7 @@ public enum SlothRecord: Sendable, Equatable {
     case sysSensor(SysSensorEntry)
     case sourceStatus(SourceStatusEntry)
     case receiverHW(ReceiverHWEntry)
+    case sensor(SensorEntry)
     case gnssSky(GNSSSkyEntry)
     case gnssSat(GNSSSatEntry)
     case aprsPacket(APRSPacketEntry)
@@ -113,6 +114,7 @@ public enum SlothRecord: Sendable, Equatable {
         case .sysSensor    (let e): return e.ts
         case .sourceStatus (let e): return e.ts
         case .receiverHW   (let e): return e.ts
+        case .sensor       (let e): return e.ts
         case .gnssSky      (let e): return e.ts
         case .gnssSat      (let e): return e.ts
         case .aprsPacket   (let e): return e.ts
@@ -166,6 +168,7 @@ public enum SlothRecord: Sendable, Equatable {
         case .sysSensor:     return "sys_sensor"
         case .sourceStatus:  return "source_status"
         case .receiverHW:    return "receiver_hw"
+        case .sensor:        return "sensor"
         case .gnssSky:       return "gnss_sky"
         case .gnssSat:       return "gnss_sat"
         case .aprsPacket:    return "aprs_packet"
@@ -243,6 +246,7 @@ extension SlothRecord: Decodable {
         case "sys_sensor":     r = .sysSensor    (try SysSensorEntry    (from: decoder))
         case "source_status":  r = .sourceStatus (try SourceStatusEntry (from: decoder))
         case "receiver_hw":    r = .receiverHW   (try ReceiverHWEntry   (from: decoder))
+        case "sensor":         r = .sensor       (try SensorEntry       (from: decoder))
         case "gnss_sky":       r = .gnssSky      (try GNSSSkyEntry      (from: decoder))
         case "gnss_sat":       r = .gnssSat      (try GNSSSatEntry      (from: decoder))
         case "aprs_packet":    r = .aprsPacket   (try APRSPacketEntry   (from: decoder))
@@ -300,6 +304,7 @@ extension SlothRecord: Encodable {
         case .sysSensor    (let e): try e.encode(to: encoder)
         case .sourceStatus (let e): try e.encode(to: encoder)
         case .receiverHW   (let e): try e.encode(to: encoder)
+        case .sensor       (let e): try e.encode(to: encoder)
         case .gnssSky      (let e): try e.encode(to: encoder)
         case .gnssSat      (let e): try e.encode(to: encoder)
         case .aprsPacket   (let e): try e.encode(to: encoder)

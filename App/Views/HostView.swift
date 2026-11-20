@@ -40,6 +40,11 @@ private struct DaemonHostSections: View {
             if let s = report.status { SysStatusRows(status: s) }
             ForEach(report.sensors) { SysSensorRow(sensor: $0) }
         }
+        if !report.radios.isEmpty {
+            Section("\(daemon.uppercased()) · sensors") {
+                ForEach(report.radioList) { RadioRow(radio: $0) }
+            }
+        }
         if !report.sources.isEmpty {
             Section("\(daemon.uppercased()) · sources") {
                 ForEach(report.sourceList) { SourceRow(source: $0) }
@@ -147,6 +152,7 @@ private struct SourceRow: View {
         case .stale?:         return "clock"
         case .down?:          return "xmark.octagon"
         case .notConfigured?: return "minus.circle"
+        case .notInstalled?:  return "cable.connector.slash"
         case nil:             return "questionmark.circle"
         }
     }
@@ -156,6 +162,8 @@ private struct SourceRow: View {
         case .ok?:    return .phosphorTeal
         case .stale?: return .alertHotLow
         case .down?:  return .alertHotCrit
+        // Asked for but absent: worth a look, not an alarm.
+        case .notInstalled?: return .heatMid
         default:      return .secondary
         }
     }
@@ -164,6 +172,49 @@ private struct SourceRow: View {
         let parts = [source.endpoint, source.desc, source.detail]
             .compactMap { $0 }.filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+private struct RadioRow: View {
+
+    let radio: SensorEntry
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: icon).foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(radio.name ?? radio.kind).bold(radio.stateValue == .error)
+                    Text(radio.state).font(.caption).foregroundStyle(tint)
+                }
+                Text("\(radio.kind) · \(radio.iface)")
+                    .font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if let n = radio.observed {
+                Text(n.formatted(.number.notation(.compactName)))
+                    .font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var icon: String {
+        switch radio.stateValue {
+        case .active?:  return "dot.radiowaves.left.and.right"
+        case .present?: return "checkmark.circle"
+        case .hidden?:  return "eye.slash"
+        case .error?:   return "xmark.octagon"
+        case nil:       return "questionmark.circle"
+        }
+    }
+
+    private var tint: Color {
+        switch radio.stateValue {
+        case .active?: return .phosphorTeal
+        case .error?:  return .alertHotCrit
+        default:       return .secondary
+        }
     }
 }
 

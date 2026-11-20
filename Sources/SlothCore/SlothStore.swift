@@ -264,6 +264,7 @@ public final class SlothStore {
         case .sysSensor    (let e): hostReports[daemon, default: HostReport()].apply(e)
         case .sourceStatus (let e): hostReports[daemon, default: HostReport()].apply(e)
         case .receiverHW   (let e): hostReports[daemon, default: HostReport()].apply(e)
+        case .sensor       (let e): hostReports[daemon, default: HostReport()].apply(e)
         case .gnssSky      (let e): gnssSky = e; dropSetSatellites(now: e.ts)
         case .gnssSat      (let e): gnssSats[e.id] = e; dropSetSatellites(now: e.ts)
         case .aprsPacket   (let e): appendAPRSPacket(e)

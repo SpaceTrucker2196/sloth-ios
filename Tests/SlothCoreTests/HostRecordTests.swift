@@ -96,4 +96,38 @@ final class HostRecordTests: XCTestCase {
         store.reset()
         XCTAssertTrue(store.hostReports.isEmpty)
     }
+
+    // JSONL 2.5.0: sloth-rf's state for a decoder it trimmed (no SDR).
+    func testNotInstalledSortsWithTheInactiveRows() throws {
+        let line = #"{"type":"source_status","ts":1800000060,"seq":2,"name":"rtl433","kind":"sub-ghz","flag":"--rtl433","state":"not_installed","detail":"not started: no SDR on USB at startup (--no-sdr-trim keeps it)","endpoint":"/var/lib/rtl_433/events.jsonl"}"#
+        guard case .sourceStatus(let r) = try decode(line) else { return XCTFail() }
+        XCTAssertEqual(r.stateValue, .notInstalled)
+        XCTAssertTrue(r.isInactive)
+
+        let store = SlothStore()
+        store.ingestRF(.sourceStatus(r))
+        store.ingestRF(.sourceStatus(SourceStatusEntry(ts: 1, seq: 2, name: "zz", state: "ok")))
+        XCTAssertEqual(store.hostReports["rf"]?.sourceList.map(\.name), ["zz", "rtl433"])
+    }
+
+    // Lines from W9FJC's live stream, 2026-11-19.
+    func testSensorRegistryFromLiveStream() throws {
+        let wifi = #"{"type":"sensor","ts":1795121756,"kind":"wifi","state":"active","name":"Wi-Fi monitor","iface":"alfa0","observed":35118365,"first_seen":1795059346,"last_seen":1795121756}"#
+        let ble = #"{"type":"sensor","ts":1795121756,"kind":"ble","state":"active","name":"BLE HCI monitor","iface":"bluetooth-monitor","observed":7632707,"first_seen":1795059346,"last_seen":1795121756}"#
+        guard case .sensor(let w) = try decode(wifi), case .sensor(let b) = try decode(ble)
+        else { return XCTFail() }
+        XCTAssertEqual(w.id, "wifi/alfa0")
+        XCTAssertEqual(w.stateValue, .active)
+        XCTAssertEqual(w.firstSeen, 1795059346)
+
+        let store = SlothStore()
+        store.ingest(.sensor(w))
+        store.ingest(.sensor(b))
+        // A later row for the same radio replaces it, not adds.
+        store.ingest(.sensor(SensorEntry(ts: 2, kind: "wifi", state: "error", iface: "alfa0")))
+        let radios = try XCTUnwrap(store.hostReports["wifi"]?.radioList)
+        XCTAssertEqual(radios.map(\.id), ["ble/bluetooth-monitor", "wifi/alfa0"])
+        XCTAssertEqual(radios.last?.stateValue, .error)
+        XCTAssertEqual(store.unknownCount, 0)
+    }
 }

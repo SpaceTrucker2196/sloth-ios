@@ -139,6 +139,14 @@ public struct SourceStatusEntry: Sendable, Codable, Equatable, Identifiable {
     public enum State: String, Sendable {
         case ok, stale, down
         case notConfigured = "not_configured"
+        /// JSONL 2.5.0, sloth-rf only: asked for, but no SDR was on USB
+        /// at startup, so the input was trimmed. Fixed until a restart.
+        case notInstalled  = "not_installed"
+    }
+
+    /// Neither state reads anything; both sort after the live rows.
+    public var isInactive: Bool {
+        stateValue == .notConfigured || stateValue == .notInstalled
     }
 
     public let type: String
@@ -230,6 +238,49 @@ public struct ReceiverHWEntry: Sendable, Codable, Equatable, Identifiable {
     }
 }
 
+// MARK: - sensor
+
+/// One observation source in sloth's passive sensor registry: a Wi-Fi
+/// monitor radio, the BLE monitor, gpsd, an SDR decoder. Keyed
+/// `kind` + `iface`.
+public struct SensorEntry: Sendable, Codable, Equatable, Identifiable {
+
+    public enum State: String, Sendable {
+        case present, active, hidden, error
+    }
+
+    public let type: String
+    public let ts: Int
+    /// `wifi`, `ble`, `zigbee`, `sdr`, `gps`, `adsb`, `meshtastic`,
+    /// `can`, `aprs`, `rtl433`, `victron`.
+    public let kind: String
+    /// Free text so a new state never fails the decode.
+    public let state: String
+    public let name: String?
+    public let iface: String
+    /// Cumulative observation count.
+    public let observed: Int?
+    public let firstSeen: Int?
+    public let lastSeen: Int?
+
+    public var id: String { "\(kind)/\(iface)" }
+    public var stateValue: State? { State(rawValue: state) }
+
+    enum CodingKeys: String, CodingKey {
+        case type, ts, kind, state, name, iface, observed
+        case firstSeen = "first_seen"
+        case lastSeen  = "last_seen"
+    }
+
+    public init(ts: Int, kind: String, state: String, name: String? = nil,
+                iface: String, observed: Int? = nil,
+                firstSeen: Int? = nil, lastSeen: Int? = nil) {
+        self.type = "sensor"; self.ts = ts
+        self.kind = kind; self.state = state; self.name = name; self.iface = iface
+        self.observed = observed; self.firstSeen = firstSeen; self.lastSeen = lastSeen
+    }
+}
+
 // MARK: - One daemon's host report
 
 /// The newest batch from one daemon. A sensor or receiver that left
@@ -242,13 +293,16 @@ public struct HostReport: Sendable, Equatable {
     public private(set) var sensors: [SysSensorEntry] = []
     public private(set) var sources: [String: SourceStatusEntry] = [:]
     public private(set) var receivers: [ReceiverHWEntry] = []
+    /// The passive sensor registry (`sensor`), keyed `kind/iface`.
+    /// Change-only rows, not part of the 60 s batch.
+    public private(set) var radios: [String: SensorEntry] = [:]
 
     public init() {}
 
     /// Sources in the schema's order, configured ones first.
     public var sourceList: [SourceStatusEntry] {
         sources.values.sorted {
-            let a = $0.stateValue == .notConfigured, b = $1.stateValue == .notConfigured
+            let a = $0.isInactive, b = $1.isInactive
             if a != b { return !a }
             return $0.name < $1.name
         }
@@ -279,6 +333,13 @@ public struct HostReport: Sendable, Equatable {
     }
 
     mutating func apply(_ e: SourceStatusEntry) { sources[e.name] = e }
+
+    mutating func apply(_ e: SensorEntry) { radios[e.id] = e }
+
+    /// Radios by kind, then interface.
+    public var radioList: [SensorEntry] {
+        radios.values.sorted { ($0.kind, $0.iface) < ($1.kind, $1.iface) }
+    }
 
     mutating func apply(_ e: ReceiverHWEntry) {
         advance(to: e.seq)
